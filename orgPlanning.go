@@ -7,7 +7,7 @@ import (
 
 // 组织规划
 type OrgPlanning struct {
-	sync.Mutex
+	lock             sync.Mutex
 	pactRegisterName string
 	remainingTime    time.Duration
 	runningUpdates   map[chan interface{}]interface{}
@@ -66,7 +66,7 @@ func (this *MailBox) Read() Mail {
 
 // 通讯录
 type addressMap struct {
-	sync.Mutex
+	lock       sync.Mutex
 	addressMap map[chan *MailBox]*addressMap
 }
 
