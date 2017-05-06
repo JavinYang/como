@@ -48,7 +48,7 @@ func (this *leader) SetRemainingTime() {}
 
 // 邮箱
 type mailBox struct {
-	Address    chan *mail  // 邮箱地址
+	Address    chan mail   // 邮箱地址
 	AddressMap *addressMap // 通讯录
 }
 
@@ -78,9 +78,9 @@ func (this *addressMap) DeleteFriend(mailBoxAddress chan *mailBox) {}
 
 // 邮件
 type mail struct {
-	SenderMailBoxAddress chan *mail
+	SenderMailBoxAddress chan mail
 	SenderName           string
-	SendeeMailBoxAddress chan *mail
+	SendeeMailBoxAddress chan mail
 	SendeeName           string
 	Content              interface{}
 	Remarks              map[string]interface{}
