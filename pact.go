@@ -13,9 +13,7 @@ type pacts struct {
 // 条约范本
 type pact struct{ orgs map[string]OrgPlanning }
 
-// 动态组织条约
-type staticOrg pact
-
+// 组织计划规范
 type planning interface {
 	init(*string, *time.Duration, *map[chan interface{}]interface{}, *leader, *mailBox)
 	Start()
@@ -23,6 +21,9 @@ type planning interface {
 	Routine()
 	Terminate()
 }
+
+// 动态组织条约
+type staticOrg pact
 
 // 加入静态组织
 func (this *staticOrg) Join(RegisterName string, planning planning) {
