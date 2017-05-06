@@ -5,38 +5,42 @@ import (
 )
 
 // 所有条约
-type Pacts struct {
-	StaticOrg  StaticOrg
-	DynamicOrg DynamicOrg
+type pacts struct {
+	StaticOrg  *staticOrg
+	DynamicOrg *dynamicOrg
 }
 
 // 条约范本
-type Pact struct{ Orgs map[string]OrgPlanning }
+type pact struct{ orgs map[string]OrgPlanning }
 
 // 动态组织条约
-type StaticOrg Pact
+type staticOrg pact
 
-type Planning interface {
-	init()
+type planning interface {
+	init(*string, *time.Duration, *map[chan interface{}]interface{}, *leader, *mailBox)
+	Start()
+	Info()
+	Routine()
+	Terminate()
 }
 
 // 加入静态组织
-func (this *StaticOrg) Join(RegisterName string, planning Planning) {
-	planning.init()
+func (this *staticOrg) Join(RegisterName string, planning planning) {
+	planning.Start()
 }
 
 // 查询静态组织邮箱地址
-func (this *StaticOrg) FindMailBoxAddress(RegisterName string) chan Mail {
+func (this *staticOrg) FindMailBoxAddress(RegisterName string) chan mail {
 	return nil
 }
 
 // 静态组织条约
-type DynamicOrg Pact
+type dynamicOrg pact
 
 // 加入动态组织
-func (this *DynamicOrg) Join(RegisterName string, planning Planning, overtime time.Duration) {}
+func (this *dynamicOrg) Join(RegisterName string, planning planning, overtime time.Duration) {}
 
 // 获取新动态组织
-func (this *DynamicOrg) New(draft Draft) chan Mail {
+func (this *dynamicOrg) New(draft draft) chan mail {
 	return nil
 }
