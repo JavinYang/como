@@ -22,7 +22,7 @@ type planning interface {
 	Terminate()
 }
 
-// 动态组织条约
+// 静态组织条约
 type staticOrg pact
 
 // 加入静态组织
@@ -35,7 +35,7 @@ func (this *staticOrg) FindMailBoxAddress(RegisterName string) chan mail {
 	return nil
 }
 
-// 静态组织条约
+// 动态组织条约
 type dynamicOrg pact
 
 // 加入动态组织
