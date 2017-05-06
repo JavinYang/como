@@ -1,6 +1,7 @@
 package comm
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -8,15 +9,15 @@ import (
 // 组织规划
 type OrgPlanning struct {
 	lock             sync.Mutex
-	pactRegisterName *string
+	pactRegisterName string
 	remainingTime    *time.Duration
-	runningUpdates   *map[chan interface{}]interface{}
-	T_T              *leader
-	MailBox          *mailBox
+	runningUpdates   map[chan interface{}]interface{}
+	T_T              leader
+	MailBox          mailBox
 }
 
 // 初始化组织
-func (this *OrgPlanning) init(pactRegisterName *string, remainingTime *time.Duration, runningUpdates *map[chan interface{}]interface{}, t_t *leader, mailBox *mailBox) {
+func (this *OrgPlanning) init(pactRegisterName string, remainingTime *time.Duration) {
 }
 
 // 组织开始工作
@@ -35,7 +36,7 @@ func (this *OrgPlanning) Terminate() {}
 type leader struct{}
 
 // 添加事物循环处理
-func (this *leader) AddUpdate() {}
+func (this *leader) AddUpdate() { fmt.Println("领导AddUpdate") }
 
 // 拒绝本次服务
 func (this *leader) DenialService() {}

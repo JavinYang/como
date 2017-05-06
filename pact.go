@@ -15,7 +15,7 @@ type pact struct{ orgs map[string]OrgPlanning }
 
 // 组织计划规范
 type planning interface {
-	init(*string, *time.Duration, *map[chan interface{}]interface{}, *leader, *mailBox)
+	init(pactRegisterName string, overTime *time.Duration)
 	Start()
 	Info()
 	Routine()
