@@ -8,7 +8,7 @@ import (
 )
 
 // 组织规划
-type OrgPlanning struct {
+type Planning struct {
 	lock             sync.Mutex
 	pactRegisterName string
 	remainingTime    *time.Duration
@@ -18,7 +18,7 @@ type OrgPlanning struct {
 }
 
 // 初始化(框架内部使用)
-func (this *OrgPlanning) init(pactRegisterName string, mailLen int, remainingTime *time.Duration) (newMailBoxAddress chan mail) {
+func (this *Planning) init(pactRegisterName string, mailLen int, remainingTime *time.Duration) (newMailBoxAddress chan mail) {
 	this.pactRegisterName = pactRegisterName
 	newMailBoxAddress = make(chan mail, mailLen)
 	this.MailBox.Address = newMailBoxAddress
@@ -28,30 +28,30 @@ func (this *OrgPlanning) init(pactRegisterName string, mailLen int, remainingTim
 }
 
 // 投递邮件到邮箱(框架内部使用)
-func (this *OrgPlanning) deliverMailForMailBox(newMail mail) {
+func (this *Planning) deliverMailForMailBox(newMail mail) {
 	this.MailBox.mail = newMail
 }
 
 // 例行公事开始(框架内部使用)
-func (this *OrgPlanning) routineStart() {}
+func (this *Planning) routineStart() {}
 
 // 例行公事收尾(框架内部使用)
-func (this *OrgPlanning) routineEnd() {}
+func (this *Planning) routineEnd() {}
 
 // 初始化组织
-func (this *OrgPlanning) Init() {}
+func (this *Planning) Init() {}
 
 // 例行公事开始
-func (this *OrgPlanning) RoutineStart() {}
+func (this *Planning) RoutineStart() {}
 
 // 例行公事收尾
-func (this *OrgPlanning) RoutineEnd() {}
+func (this *Planning) RoutineEnd() {}
 
 // 带外消息
-func (this *OrgPlanning) Info() {}
+func (this *Planning) Info() {}
 
 // 组织解散
-func (this *OrgPlanning) Terminate() {}
+func (this *Planning) Terminate() {}
 
 // 组织领导
 type leader struct{}
@@ -61,7 +61,7 @@ func (this *leader) AddUpdate() { fmt.Println("领导AddUpdate") }
 
 // 拒绝本次服务
 func (this *leader) DenialService() {
-	org := (*OrgPlanning)(unsafe.Pointer(&*this))
+	org := (*Planning)(unsafe.Pointer(&*this))
 	org.MailBox.mail.acceptLine <- false
 }
 
