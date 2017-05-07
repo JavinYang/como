@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unsafe"
 )
 
 // 组织规划
@@ -16,15 +17,35 @@ type OrgPlanning struct {
 	MailBox          mailBox
 }
 
-// 初始化组织框架内部使用
-func (this *OrgPlanning) init(pactRegisterName string, remainingTime *time.Duration) {
+// 初始化(框架内部使用)
+func (this *OrgPlanning) init(pactRegisterName string, mailLen int, remainingTime *time.Duration) (newMailBoxAddress chan mail) {
+	this.pactRegisterName = pactRegisterName
+	newMailBoxAddress = make(chan mail, mailLen)
+	this.MailBox.Address = newMailBoxAddress
+	this.MailBox.acceptLine = make(chan bool, 0)
+	this.remainingTime = remainingTime
+	return
 }
+
+// 投递邮件到邮箱(框架内部使用)
+func (this *OrgPlanning) deliverMailForMailBox(newMail mail) {
+	this.MailBox.mail = newMail
+}
+
+// 例行公事开始(框架内部使用)
+func (this *OrgPlanning) routineStart() {}
+
+// 例行公事收尾(框架内部使用)
+func (this *OrgPlanning) routineEnd() {}
 
 // 初始化组织
 func (this *OrgPlanning) Init() {}
 
-// 例行公事
-func (this *OrgPlanning) Routine() {}
+// 例行公事开始
+func (this *OrgPlanning) RoutineStart() {}
+
+// 例行公事收尾
+func (this *OrgPlanning) RoutineEnd() {}
 
 // 带外消息
 func (this *OrgPlanning) Info() {}
@@ -39,7 +60,10 @@ type leader struct{}
 func (this *leader) AddUpdate() { fmt.Println("领导AddUpdate") }
 
 // 拒绝本次服务
-func (this *leader) DenialService() {}
+func (this *leader) DenialService() {
+	org := (*OrgPlanning)(unsafe.Pointer(&*this))
+	org.MailBox.mail.acceptLine <- false
+}
 
 // 获取超时时间
 func (this *leader) GetRemainingTime() {}
@@ -51,6 +75,8 @@ func (this *leader) SetRemainingTime() {}
 type mailBox struct {
 	Address    chan mail   // 邮箱地址
 	AddressMap *addressMap // 通讯录
+	mail       mail        // 邮件
+	acceptLine chan bool   // 询问别的组织受理用专线
 }
 
 // 写邮件
@@ -79,12 +105,13 @@ func (this *addressMap) DeleteFriend(mailBoxAddress chan *mailBox) {}
 
 // 邮件
 type mail struct {
-	SenderMailBoxAddress chan mail
-	SenderName           string
-	SendeeMailBoxAddress chan mail
-	SendeeName           string
-	Content              interface{}
-	Remarks              map[string]interface{}
+	SenderAddress chan mail
+	SenderName    string
+	SendeeAddress chan mail
+	SendeeName    string
+	Content       interface{}
+	Remarks       map[string]interface{}
+	acceptLine    chan bool
 }
 
 // 回复
@@ -100,7 +127,7 @@ func (this mail) Forward() draft {
 // 草稿
 type draft mail
 
-// 发送
+// 发送(如果发送的地址或者接收人不存在返回false)
 func (this draft) Send() bool {
 	return true
 }

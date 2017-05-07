@@ -1,5 +1,5 @@
 ///-------------------------------------------------------------------------------
-///                              COMM 0.1
+///                               COMM 0.1
 ///-------------------------------------------------------------------------------
 
 package comm
@@ -14,8 +14,8 @@ func init() {
 }
 
 func createPactOrg() {
-	staticOrg := &staticOrg{orgs: make(map[string]OrgPlanning)}
-	dynamicOrg := &dynamicOrg{orgs: make(map[string]OrgPlanning)}
+	staticOrg := &staticOrg{OrgsMailBoxAddress: make(map[string]chan mail)}
+	dynamicOrg := &dynamicOrg{Orgs: make(map[string]planning)}
 	PactOrg = &pacts{staticOrg, dynamicOrg}
 }
 
