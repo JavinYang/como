@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// 所有条约
+// 所有公约
 type pacts struct {
 	StaticOrg  *staticOrg
 	DynamicOrg *dynamicOrg
 }
 
-// 组织计划规范
-type planning interface {
+// 组织规定规范
+type provision interface {
 	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress chan mail)
 	deliverMailForMailBox(newMail mail)
 	Init()
@@ -23,30 +23,30 @@ type planning interface {
 	Terminate()
 }
 
-// 静态组织条约
+// 静态组织公约
 type staticOrg struct {
 	OrgsMailBoxAddress map[string]chan mail
 }
 
 // 加入静态组织
-func (this *staticOrg) Join(registerName string, planning planning, mailLen int) {
+func (this *staticOrg) Join(registerName string, provision provision, mailLen int) {
 	_, ok := this.OrgsMailBoxAddress[registerName]
 	if ok {
 		panic("已经存在叫做" + registerName + "的静态组织")
 		return
 	}
 
-	newMailBoxAddress := planning.init(registerName, mailLen, nil)
+	newMailBoxAddress := provision.init(registerName, mailLen, nil)
 	this.OrgsMailBoxAddress[registerName] = newMailBoxAddress
 
-	planning.Init()
+	provision.Init()
 
-	rPlanning := reflect.ValueOf(planning)
+	rProvision := reflect.ValueOf(provision)
 
 	planningMethodsMap := make(map[string]func())
-	numMethod := rPlanning.NumMethod()
+	numMethod := rProvision.NumMethod()
 	for i := 0; i < numMethod; i++ {
-		methodName := rPlanning.Type().Method(i).Name
+		methodName := rProvision.Type().Method(i).Name
 		switch methodName {
 		case "init":
 		case "Init":
@@ -54,7 +54,7 @@ func (this *staticOrg) Join(registerName string, planning planning, mailLen int)
 		case "Routine":
 		case "Terminate":
 		default:
-			planningMethodsMap[methodName] = rPlanning.Method(i).Interface().(func())
+			planningMethodsMap[methodName] = rProvision.Method(i).Interface().(func())
 		}
 	}
 
@@ -67,12 +67,12 @@ func (this *staticOrg) Join(registerName string, planning planning, mailLen int)
 					v.acceptLine <- false
 					continue
 				}
-				planning.deliverMailForMailBox(v)
-				planning.RoutineStart()
+				provision.deliverMailForMailBox(v)
+				provision.RoutineStart()
 				// 如果被领导回绝就continue 不能向下走了
 				v.acceptLine <- true
 				method()
-				planning.RoutineEnd()
+				provision.RoutineEnd()
 			}
 		}
 	}()
@@ -83,13 +83,13 @@ func (this *staticOrg) FindMailBoxAddress(RegisterName string) chan mail {
 	return nil
 }
 
-// 动态组织条约
+// 动态组织公约
 type dynamicOrg struct {
-	Orgs map[string]planning
+	Orgs map[string]provision
 }
 
 // 加入动态组织
-func (this *dynamicOrg) Join(RegisterName string, planning planning, overtime time.Duration) {}
+func (this *dynamicOrg) Join(RegisterName string, provision provision, overtime time.Duration) {}
 
 // 获取新动态组织
 func (this *dynamicOrg) New(draft draft) chan mail {

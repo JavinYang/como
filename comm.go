@@ -15,7 +15,7 @@ func init() {
 
 func createPactOrg() {
 	staticOrg := &staticOrg{OrgsMailBoxAddress: make(map[string]chan mail)}
-	dynamicOrg := &dynamicOrg{Orgs: make(map[string]planning)}
+	dynamicOrg := &dynamicOrg{Orgs: make(map[string]provision)}
 	PactOrg = &pacts{staticOrg, dynamicOrg}
 }
 
