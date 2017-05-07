@@ -16,12 +16,12 @@ type OrgPlanning struct {
 	MailBox          mailBox
 }
 
-// 初始化组织
+// 初始化组织框架内部使用
 func (this *OrgPlanning) init(pactRegisterName string, remainingTime *time.Duration) {
 }
 
-// 组织开始工作
-func (this *OrgPlanning) Start() {}
+// 初始化组织
+func (this *OrgPlanning) Init() {}
 
 // 例行公事
 func (this *OrgPlanning) Routine() {}

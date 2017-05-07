@@ -16,7 +16,7 @@ type pact struct{ orgs map[string]OrgPlanning }
 // 组织计划规范
 type planning interface {
 	init(pactRegisterName string, overTime *time.Duration)
-	Start()
+	Init()
 	Info()
 	Routine()
 	Terminate()
@@ -27,7 +27,7 @@ type staticOrg pact
 
 // 加入静态组织
 func (this *staticOrg) Join(RegisterName string, planning planning) {
-	planning.Start()
+	planning.Init()
 }
 
 // 查询静态组织邮箱地址
