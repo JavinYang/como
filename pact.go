@@ -16,8 +16,10 @@ type pacts struct {
 type provision interface {
 	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress chan mail)
 	deliverMailForMailBox(newMail mail)
+	getLeader() leader
 	Init()
 	Info()
+	routineStart()
 	RoutineStart()
 	RoutineEnd()
 	Terminate()
@@ -29,24 +31,24 @@ type staticOrg struct {
 }
 
 // 加入静态组织
-func (this *staticOrg) Join(registerName string, provision provision, mailLen int) {
+func (this *staticOrg) Join(registerName string, org provision, mailLen int) {
 	_, ok := this.OrgsMailBoxAddress[registerName]
 	if ok {
 		panic("已经存在叫做" + registerName + "的静态组织")
 		return
 	}
 
-	newMailBoxAddress := provision.init(registerName, mailLen, nil)
+	newMailBoxAddress := org.init(registerName, mailLen, nil)
 	this.OrgsMailBoxAddress[registerName] = newMailBoxAddress
 
-	provision.Init()
+	org.Init()
 
-	rProvision := reflect.ValueOf(provision)
+	orgReflect := reflect.ValueOf(org)
 
 	planningMethodsMap := make(map[string]func())
-	numMethod := rProvision.NumMethod()
+	numMethod := orgReflect.NumMethod()
 	for i := 0; i < numMethod; i++ {
-		methodName := rProvision.Type().Method(i).Name
+		methodName := orgReflect.Type().Method(i).Name
 		switch methodName {
 		case "init":
 		case "Init":
@@ -54,25 +56,34 @@ func (this *staticOrg) Join(registerName string, provision provision, mailLen in
 		case "Routine":
 		case "Terminate":
 		default:
-			planningMethodsMap[methodName] = rProvision.Method(i).Interface().(func())
+			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
 		}
 	}
 
 	go func() {
 		for {
 			select {
-			case v, _ := <-newMailBoxAddress:
+			case v, ok := <-newMailBoxAddress:
+				if !ok {
+					org.Terminate()
+					break
+				}
 				method, ok := planningMethodsMap[v.SenderName]
 				if !ok {
 					v.acceptLine <- false
 					continue
 				}
-				provision.deliverMailForMailBox(v)
-				provision.RoutineStart()
-				// 如果被领导回绝就continue 不能向下走了
+				org.deliverMailForMailBox(v)
+				org.routineStart()
+				org.RoutineStart()
+				T_T := org.getLeader()
+				if T_T.isAccept() {
+					v.acceptLine <- false
+					continue
+				}
 				v.acceptLine <- true
 				method()
-				provision.RoutineEnd()
+				org.RoutineEnd()
 			}
 		}
 	}()

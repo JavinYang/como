@@ -21,7 +21,7 @@ type Provision struct {
 func (this *Provision) init(pactRegisterName string, mailLen int, remainingTime *time.Duration) (newMailBoxAddress chan mail) {
 	this.pactRegisterName = pactRegisterName
 	newMailBoxAddress = make(chan mail, mailLen)
-	this.MailBox.Address = newMailBoxAddress
+	this.MailBox.Address.address = newMailBoxAddress
 	this.MailBox.acceptLine = make(chan bool, 0)
 	this.remainingTime = remainingTime
 	return
@@ -32,11 +32,15 @@ func (this *Provision) deliverMailForMailBox(newMail mail) {
 	this.MailBox.mail = newMail
 }
 
-// 例行公事开始(框架内部使用)
-func (this *Provision) routineStart() {}
+// 是否正式受理请求
+func (this *Provision) getLeader() leader {
+	return this.T_T
+}
 
-// 例行公事收尾(框架内部使用)
-func (this *Provision) routineEnd() {}
+// 例行公事开始(框架内部使用)
+func (this *Provision) routineStart() {
+	this.T_T.currentAcceptState = true
+}
 
 // 初始化组织
 func (this *Provision) Init() {}
@@ -54,15 +58,21 @@ func (this *Provision) Info() {}
 func (this *Provision) Terminate() {}
 
 // 组织领导
-type leader struct{}
+type leader struct {
+	currentAcceptState bool
+}
+
+// 是否同意本次请求
+func (this *leader) isAccept() bool {
+	return this.currentAcceptState
+}
 
 // 添加事物循环处理
 func (this *leader) AddUpdate() { fmt.Println("领导AddUpdate") }
 
 // 拒绝本次服务
 func (this *leader) DenialService() {
-	org := (*Provision)(unsafe.Pointer(&*this))
-	org.MailBox.mail.acceptLine <- false
+	this.currentAcceptState = false
 }
 
 // 获取超时时间
@@ -71,12 +81,23 @@ func (this *leader) GetRemainingTime() {}
 // 设置超时时间
 func (this *leader) SetRemainingTime() {}
 
+// 解散组织
+func (this *leader) Dissolve() {
+	org := (*Provision)(unsafe.Pointer(&*this))
+	close(org.MailBox.Address.address)
+}
+
 // 邮箱
 type mailBox struct {
-	Address    chan mail   // 邮箱地址
-	AddressMap *addressMap // 通讯录
-	mail       mail        // 邮件
-	acceptLine chan bool   // 询问别的组织受理用专线
+	Address    mailBoxAddress // 邮箱地址
+	AddressMap *addressMap    // 通讯录
+	mail       mail           // 邮件
+	acceptLine chan bool      // 询问别的组织受理用专线
+}
+
+// 邮箱地址(封装一层是因为不想让用户直接操作通道)
+type mailBoxAddress struct {
+	address chan mail // 邮箱地址
 }
 
 // 写邮件
@@ -105,9 +126,9 @@ func (this *addressMap) DeleteFriend(mailBoxAddress chan *mailBox) {}
 
 // 邮件
 type mail struct {
-	SenderAddress chan mail
+	SenderAddress mailBoxAddress
 	SenderName    string
-	SendeeAddress chan mail
+	SendeeAddress mailBoxAddress
 	SendeeName    string
 	Content       interface{}
 	Remarks       map[string]interface{}
@@ -129,5 +150,7 @@ type draft mail
 
 // 发送(如果发送的地址或者接收人不存在返回false)
 func (this draft) Send() bool {
-	return true
+	// 如果地址已经不存在了返回 flase
+	this.SendeeAddress.address <- mail(this)
+	return <-this.acceptLine
 }
