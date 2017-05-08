@@ -77,7 +77,7 @@ func (this *staticOrg) Join(registerName string, org provision, mailLen int) {
 				org.routineStart()
 				org.RoutineStart()
 				T_T := org.getLeader()
-				if T_T.isAccept() {
+				if !T_T.isAccept() {
 					v.acceptLine <- false
 					continue
 				}
