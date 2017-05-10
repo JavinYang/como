@@ -6,10 +6,20 @@ import (
 	"time"
 )
 
+// 公约实例
+var Pact *pacts
+
+// 初始化公约实例
+func init() {
+	staticOrg := &staticPact{OrgsMailBoxAddress: make(map[string]chan mail)}
+	dynamicOrg := &dynamicPact{Orgs: make(map[string]provision)}
+	Pact = &pacts{staticOrg, dynamicOrg}
+}
+
 // 所有公约
 type pacts struct {
-	StaticOrg  *staticOrg
-	DynamicOrg *dynamicOrg
+	Static  *staticPact
+	Dynamic *dynamicPact
 }
 
 // 组织规定规范
@@ -26,12 +36,12 @@ type provision interface {
 }
 
 // 静态组织公约
-type staticOrg struct {
+type staticPact struct {
 	OrgsMailBoxAddress map[string]chan mail
 }
 
 // 加入静态组织
-func (this *staticOrg) Join(registerName string, org provision, mailLen int) {
+func (this *staticPact) Join(registerName string, org provision, mailLen int) {
 	_, ok := this.OrgsMailBoxAddress[registerName]
 	if ok {
 		panic("已经存在叫做" + registerName + "的静态组织")
@@ -90,19 +100,19 @@ func (this *staticOrg) Join(registerName string, org provision, mailLen int) {
 }
 
 // 查询静态组织邮箱地址
-func (this *staticOrg) FindMailBoxAddress(RegisterName string) chan mail {
+func (this *staticPact) FindMailBoxAddress(RegisterName string) chan mail {
 	return nil
 }
 
 // 动态组织公约
-type dynamicOrg struct {
+type dynamicPact struct {
 	Orgs map[string]provision
 }
 
 // 加入动态组织
-func (this *dynamicOrg) Join(RegisterName string, provision provision, overtime time.Duration) {}
+func (this *dynamicPact) Join(RegisterName string, provision provision, overtime time.Duration) {}
 
 // 获取新动态组织
-func (this *dynamicOrg) New(draft draft) chan mail {
+func (this *dynamicPact) New(draft draft) chan mail {
 	return nil
 }

@@ -112,7 +112,6 @@ func (this *mailBox) Read() mail {
 
 // 通讯录
 type addressMap struct {
-	lock       sync.Mutex
 	addressMap map[chan *mailBox]*addressMap
 }
 
@@ -149,8 +148,16 @@ func (this mail) Forward() draft {
 type draft mail
 
 // 发送(如果发送的地址或者接收人不存在返回false)
-func (this draft) Send() bool {
-	// 如果地址已经不存在了返回 flase
+func (this draft) Send() (ok bool) {
+
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+
 	this.SendeeAddress.address <- mail(this)
-	return <-this.acceptLine
+	ok = <-this.acceptLine
+
+	return
 }
