@@ -102,7 +102,7 @@ func (this *leader) Dissolve() {
 // 邮箱
 type mailBox struct {
 	Address    mailBoxAddress // 邮箱地址
-	AddressMap *addressMap    // 通讯录
+	AddressMap addressMap     // 通讯录
 	mail       mail           // 邮件
 	acceptLine chan bool      // 询问别的组织受理用专线
 }
@@ -134,7 +134,7 @@ func (this *addressMap) AddFriend() bool {
 }
 
 // 删除好友
-func (this *addressMap) DeleteFriend(mailBoxAddress chan *mailBox) {}
+func (this *addressMap) RemoveFriend(mailBoxAddress chan *mailBox) {}
 
 // 邮件
 type mail struct {
