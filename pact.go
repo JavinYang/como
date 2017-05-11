@@ -102,6 +102,10 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 
 // 查询静态组织邮箱地址
 func (this *staticPact) FindMailBoxAddress(RegisterName string) chan mail {
+	mailBoxAddress, ok := this.orgsMailBoxAddress[RegisterName]
+	if ok {
+		return mailBoxAddress
+	}
 	return nil
 }
 
