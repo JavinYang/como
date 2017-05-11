@@ -11,8 +11,8 @@ var Pact *pacts
 
 // 初始化公约实例
 func init() {
-	staticOrg := &staticPact{OrgsMailBoxAddress: make(map[string]chan mail)}
-	dynamicOrg := &dynamicPact{Orgs: make(map[string]provision)}
+	staticOrg := &staticPact{orgsMailBoxAddress: make(map[string]chan mail)}
+	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]provision)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
 
@@ -27,7 +27,7 @@ type provision interface {
 	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress chan mail)
 	deliverMailForMailBox(newMail mail)
 	getLeader() leader
-	Init()
+	Init(...interface{})
 	Info()
 	routineStart()
 	RoutineStart()
@@ -37,21 +37,21 @@ type provision interface {
 
 // 静态组织公约
 type staticPact struct {
-	OrgsMailBoxAddress map[string]chan mail
+	orgsMailBoxAddress map[string]chan mail
 }
 
 // 加入静态组织
-func (this *staticPact) Join(registerName string, org provision, mailLen int) {
-	_, ok := this.OrgsMailBoxAddress[registerName]
+func (this *staticPact) Join(registerName string, org provision, mailLen int, initPars ...interface{}) {
+	_, ok := this.orgsMailBoxAddress[registerName]
 	if ok {
 		panic("已经存在叫做" + registerName + "的静态组织")
 		return
 	}
 
 	newMailBoxAddress := org.init(registerName, mailLen, nil)
-	this.OrgsMailBoxAddress[registerName] = newMailBoxAddress
+	this.orgsMailBoxAddress[registerName] = newMailBoxAddress
 
-	org.Init()
+	org.Init(initPars)
 
 	orgReflect := reflect.ValueOf(org)
 
@@ -60,15 +60,17 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int) {
 	for i := 0; i < numMethod; i++ {
 		methodName := orgReflect.Type().Method(i).Name
 		switch methodName {
-		case "init":
 		case "Init":
+		case "RoutineStart":
+		case "RoutineEnd":
 		case "Info":
-		case "Routine":
 		case "Terminate":
 		default:
 			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
 		}
 	}
+
+	T_T := org.getLeader()
 
 	go func() {
 		for {
@@ -86,7 +88,6 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int) {
 				org.deliverMailForMailBox(v)
 				org.routineStart()
 				org.RoutineStart()
-				T_T := org.getLeader()
 				if !T_T.isAccept() {
 					v.acceptLine <- false
 					continue
@@ -106,13 +107,91 @@ func (this *staticPact) FindMailBoxAddress(RegisterName string) chan mail {
 
 // 动态组织公约
 type dynamicPact struct {
-	Orgs map[string]provision
+	orgsProvision map[string]provision
+	overtime      time.Duration
+	mailLen       int
 }
 
 // 加入动态组织
-func (this *dynamicPact) Join(RegisterName string, provision provision, overtime time.Duration) {}
+func (this *dynamicPact) Join(registerName string, provision provision, mailLen int, overtime time.Duration) {
+
+	if overtime < 0 || overtime == 0 {
+		panic(registerName + "加入动态组织的overtime不能<=0因为着没有意义")
+	}
+
+	_, ok := this.orgsProvision[registerName]
+	if ok {
+		panic("已经存在叫做" + registerName + "的动态组织")
+		return
+	}
+	this.orgsProvision[registerName] = provision
+	this.mailLen = mailLen
+	this.overtime = overtime
+}
 
 // 获取新动态组织
-func (this *dynamicPact) New(draft draft) chan mail {
-	return nil
+func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mailBoxAddress chan mail, ok bool) {
+	org, ok := this.orgsProvision[registerName]
+	if !ok {
+		return nil, false
+	}
+	overtime := this.overtime
+	newMailBoxAddress := org.init(registerName, this.mailLen, &overtime)
+
+	org.Init(initPars)
+
+	orgReflect := reflect.ValueOf(org)
+
+	planningMethodsMap := make(map[string]func())
+	numMethod := orgReflect.NumMethod()
+	for i := 0; i < numMethod; i++ {
+		methodName := orgReflect.Type().Method(i).Name
+		switch methodName {
+		case "Init":
+		case "RoutineStart":
+		case "RoutineEnd":
+		case "Info":
+		case "Terminate":
+		default:
+			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
+		}
+	}
+
+	T_T := org.getLeader()
+
+	go func() {
+		for {
+			select {
+			case v, ok := <-newMailBoxAddress:
+				if !ok {
+					org.Terminate()
+					return
+				}
+				method, ok := planningMethodsMap[v.SenderName]
+				if !ok {
+					v.acceptLine <- false
+					continue
+				}
+				org.deliverMailForMailBox(v)
+				org.routineStart()
+				org.RoutineStart()
+				if !T_T.isAccept() {
+					v.acceptLine <- false
+					continue
+				}
+				v.acceptLine <- true
+				method()
+				org.RoutineEnd()
+			case <-time.After(time.Second):
+				if overtime == 0 {
+					//告诉朋友我要死了
+					T_T.Dissolve()
+					org.Terminate()
+				}
+				overtime -= 1
+			}
+		}
+	}()
+
+	return newMailBoxAddress, true
 }

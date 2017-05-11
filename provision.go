@@ -2,28 +2,26 @@ package como
 
 import (
 	"fmt"
-	"sync"
 	"time"
 	"unsafe"
 )
 
 // 组织规划
 type Provision struct {
-	lock             sync.Mutex
 	pactRegisterName string
-	remainingTime    *time.Duration
+	overtime         *time.Duration
 	runningUpdates   map[chan interface{}]interface{}
 	MailBox          mailBox
 	T_T              leader
 }
 
 // 初始化(框架内部使用)
-func (this *Provision) init(pactRegisterName string, mailLen int, remainingTime *time.Duration) (newMailBoxAddress chan mail) {
+func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time.Duration) (newMailBoxAddress chan mail) {
 	this.pactRegisterName = pactRegisterName
 	newMailBoxAddress = make(chan mail, mailLen)
 	this.MailBox.Address.address = newMailBoxAddress
 	this.MailBox.acceptLine = make(chan bool, 0)
-	this.remainingTime = remainingTime
+	this.overtime = overtime
 	return
 }
 
@@ -43,7 +41,7 @@ func (this *Provision) routineStart() {
 }
 
 // 初始化组织
-func (this *Provision) Init() {}
+func (this *Provision) Init(...interface{}) {}
 
 // 例行公事开始
 func (this *Provision) RoutineStart() {}
@@ -76,15 +74,29 @@ func (this *leader) DenialService() {
 }
 
 // 获取超时时间
-func (this *leader) GetRemainingTime() {}
+func (this *leader) GetOvertime() time.Duration {
+	org := (*Provision)(unsafe.Pointer(&*this))
+	if org.overtime == nil {
+		return -1
+	}
+	return *org.overtime
+}
 
 // 设置超时时间
-func (this *leader) SetRemainingTime() {}
+func (this *leader) SetRemainingTime(newOvertime time.Duration) {
+	org := (*Provision)(unsafe.Pointer(&*this))
+	if org.overtime != nil {
+		*org.overtime = newOvertime
+	}
+}
 
 // 解散组织
 func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(&*this))
-	close(org.MailBox.Address.address)
+	if !org.MailBox.Address.isClose {
+		org.MailBox.Address.isClose = true
+		close(org.MailBox.Address.address)
+	}
 }
 
 // 邮箱
@@ -98,6 +110,7 @@ type mailBox struct {
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type mailBoxAddress struct {
 	address chan mail // 邮箱地址
+	isClose bool      // 是否邮箱地址已经被关闭
 }
 
 // 写邮件
@@ -155,6 +168,10 @@ func (this draft) Send() (ok bool) {
 			ok = false
 		}
 	}()
+
+	if this.SendeeAddress.address == nil {
+		return false
+	}
 
 	this.SendeeAddress.address <- mail(this)
 	ok = <-this.acceptLine
