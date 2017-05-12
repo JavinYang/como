@@ -1,18 +1,17 @@
 package como
 
 import (
-	"fmt"
 	"time"
 	"unsafe"
 )
 
 // 组织规划
 type Provision struct {
-	pactRegisterName string
-	overtime         *time.Duration
-	runningUpdates   map[chan interface{}]interface{}
-	MailBox          mailBox
-	T_T              leader
+	T_T              leader                           // 领导
+	MailBox          mailBox                          // 邮箱
+	pactRegisterName string                           // 公约祖册名称
+	overtime         *time.Duration                   // 超时时间
+	runningUpdates   map[chan interface{}]interface{} // 当前运行附属的循环
 }
 
 // 初始化(框架内部使用)
@@ -30,7 +29,7 @@ func (this *Provision) deliverMailForMailBox(newMail mail) {
 	this.MailBox.mail = newMail
 }
 
-// 是否正式受理请求
+// 获取领导
 func (this *Provision) getLeader() leader {
 	return this.T_T
 }
@@ -66,7 +65,7 @@ func (this *leader) isAccept() bool {
 }
 
 // 添加事物循环处理
-func (this *leader) AddUpdate() { fmt.Println("领导AddUpdate") }
+func (this *leader) AddUpdate() {}
 
 // 拒绝本次服务
 func (this *leader) DenialService() {
@@ -95,72 +94,156 @@ func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(&*this))
 	if !org.MailBox.Address.isClose {
 		org.MailBox.Address.isClose = true
+		// 给所有好友发送我死了
+		draft := org.MailBox.Write()
+		draft.senderName = "Info"
+		for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
+			draft.sendeeAddress = mailBoxAddress
+			draft.sendeeName = "Info"
+			closeRemark := make(map[string]interface{})
+			closeRemark["Close"] = nil
+			draft.remarks = closeRemark
+			draft.Send()
+
+		}
+		// 关闭自己的邮箱
 		close(org.MailBox.Address.address)
 	}
 }
 
 // 邮箱
 type mailBox struct {
-	Address    mailBoxAddress // 邮箱地址
-	AddressMap addressMap     // 通讯录
 	mail       mail           // 邮件
+	Address    MailBoxAddress // 邮箱地址
+	AddressMap addressMap     // 通讯录
 	acceptLine chan bool      // 询问别的组织受理用专线
 }
 
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
-type mailBoxAddress struct {
+type MailBoxAddress struct {
 	address chan mail // 邮箱地址
 	isClose bool      // 是否邮箱地址已经被关闭
 }
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{}
+	return draft{senderAddress: this.Address, senderName: this.Read().sendeeName}
 }
 
 // 读邮件
 func (this *mailBox) Read() mail {
-	return mail{}
+	return this.mail // 这里是否会读到同一封邮件?!!!
 }
 
 // 通讯录
 type addressMap struct {
-	addressMap map[chan *mailBox]*addressMap
+	addressMap map[MailBoxAddress]*struct{}
 }
 
 // 添加好友
-func (this *addressMap) AddFriend() bool {
-	return true
+func (this *addressMap) AddFriend(mailBoxAddress MailBoxAddress) {
+	this.addressMap[mailBoxAddress] = nil
 }
 
 // 删除好友
-func (this *addressMap) RemoveFriend(mailBoxAddress chan *mailBox) {}
+func (this *addressMap) RemoveFriend(mailBoxAddress MailBoxAddress) {
+	_, ok := this.addressMap[mailBoxAddress]
+	if !ok {
+		return
+	}
+	delete(this.addressMap, mailBoxAddress)
+	return
+}
+
+// 获取所有好友
+func (this *addressMap) GetAllFriends() []MailBoxAddress {
+	friendsAddress := make([]MailBoxAddress, len(this.addressMap))
+	i := 0
+	for address, _ := range this.addressMap {
+		friendsAddress[i] = address
+		i++
+	}
+	return friendsAddress
+}
 
 // 邮件
 type mail struct {
-	SenderAddress mailBoxAddress
-	SenderName    string
-	SendeeAddress mailBoxAddress
-	SendeeName    string
-	Content       interface{}
-	Remarks       map[string]interface{}
-	acceptLine    chan bool
+	senderAddress MailBoxAddress         // 发件人地址
+	senderName    string                 // 发件人名字
+	sendeeAddress MailBoxAddress         // 收件人地址
+	sendeeName    string                 // 收件人名字
+	content       interface{}            // 邮件内容
+	remarks       map[string]interface{} // 邮件备注
+	acceptLine    chan bool              // 请求专线用来等待收件方处理请求
+}
+
+// 获取发件人地址
+func (this *mail) GetSenderAddress() MailBoxAddress {
+	return this.senderAddress
+}
+
+// 获取发件人名字
+func (this *mail) GetSenderName() string {
+	return this.senderName
+}
+
+// 获取邮件内容
+func (this *mail) GetContent() interface{} {
+	return this.content
+}
+
+// 获取邮件注释
+func (this *mail) GetRemarks() map[string]interface{} {
+	return this.remarks
+
 }
 
 // 回复
-func (this mail) Reply() draft {
-	return draft(this)
+func (this mail) Reply(senderName string) draft {
+	draft := draft(this)
+	draft.senderAddress = draft.sendeeAddress
+	draft.senderName = draft.senderName
+	draft.sendeeAddress = draft.senderAddress
+	draft.sendeeName = senderName
+	draft.content = nil
+	draft.remarks = nil
+	return draft
 }
 
 // 转发
 func (this mail) Forward() draft {
-	return draft(this)
+	draft := draft(this)
+	draft.senderAddress = draft.sendeeAddress
+	draft.senderName = draft.senderName
+	draft.sendeeAddress = MailBoxAddress{}
+	draft.sendeeName = ""
+	return draft
 }
 
 // 草稿
 type draft mail
 
-// 发送(如果发送的地址或者接收人不存在返回false)
+// 设置收件人地址
+func (this *draft) SetSendeeAddress(mailBoxAddress MailBoxAddress) {
+	this.sendeeAddress = mailBoxAddress
+}
+
+// 设置收件人名字
+func (this *draft) SetSendeeName(sendeeName string) {
+	this.sendeeName = sendeeName
+}
+
+// 设置草稿内容
+func (this *draft) SetContent(content interface{}) {
+	this.content = content
+}
+
+// 设置草稿备注
+func (this *draft) SetRemarks(remarks map[string]interface{}) {
+	this.remarks = remarks
+}
+
+// 发送草稿(如果发送的地址或者接收人不存在返回false)
 func (this draft) Send() (ok bool) {
 
 	defer func() {
@@ -169,11 +252,11 @@ func (this draft) Send() (ok bool) {
 		}
 	}()
 
-	if this.SendeeAddress.address == nil {
+	if this.sendeeAddress.address == nil {
 		return false
 	}
 
-	this.SendeeAddress.address <- mail(this)
+	this.sendeeAddress.address <- mail(this)
 	ok = <-this.acceptLine
 
 	return

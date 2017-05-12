@@ -1,7 +1,6 @@
 package como
 
 import (
-	//	"fmt"
 	"reflect"
 	"time"
 )
@@ -63,7 +62,6 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 		case "Init":
 		case "RoutineStart":
 		case "RoutineEnd":
-		case "Info":
 		case "Terminate":
 		default:
 			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
@@ -80,7 +78,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 					org.Terminate()
 					break
 				}
-				method, ok := planningMethodsMap[v.SenderName]
+				method, ok := planningMethodsMap[v.senderName]
 				if !ok {
 					v.acceptLine <- false
 					continue
@@ -154,7 +152,6 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 		case "Init":
 		case "RoutineStart":
 		case "RoutineEnd":
-		case "Info":
 		case "Terminate":
 		default:
 			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
@@ -171,7 +168,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 					org.Terminate()
 					return
 				}
-				method, ok := planningMethodsMap[v.SenderName]
+				method, ok := planningMethodsMap[v.senderName]
 				if !ok {
 					v.acceptLine <- false
 					continue
