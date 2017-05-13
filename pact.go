@@ -25,7 +25,7 @@ type pacts struct {
 type provision interface {
 	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress chan mail)
 	deliverMailForMailBox(newMail mail)
-	getLeader() leader
+	getLeader() *leader
 	Init(...interface{})
 	Info()
 	routineStart()
@@ -69,14 +69,14 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 	}
 
 	T_T := org.getLeader()
-
 	go func() {
 		for {
 			select {
 			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
-					break
+					T_T.Dissolve()
+					return
 				}
 				method, ok := planningMethodsMap[mail.senderName]
 				if !ok {
@@ -168,6 +168,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
+					T_T.Dissolve()
 					return
 				}
 				method, ok := planningMethodsMap[mail.senderName]
@@ -189,9 +190,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 				function()
 			case <-time.After(time.Second):
 				if overtime == 0 {
-					//告诉朋友我要死了
 					T_T.Dissolve()
-					org.Terminate()
 				}
 				overtime -= 1
 			}

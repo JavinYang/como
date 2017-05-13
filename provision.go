@@ -1,6 +1,7 @@
 package como
 
 import (
+	//	"fmt"
 	"time"
 	"unsafe"
 )
@@ -22,6 +23,8 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time
 	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
+	isClose := false
+	this.MailBox.Address.isClose = &isClose
 	return
 }
 
@@ -31,8 +34,8 @@ func (this *Provision) deliverMailForMailBox(newMail mail) {
 }
 
 // 获取领导
-func (this *Provision) getLeader() leader {
-	return this.T_T
+func (this *Provision) getLeader() *leader {
+	return &this.T_T
 }
 
 // 例行公事开始(框架内部使用)
@@ -133,8 +136,9 @@ func (this *leader) SetRemainingTime(newOvertime time.Duration) {
 // 解散组织
 func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(&*this))
-	if !org.MailBox.Address.isClose {
-		org.MailBox.Address.isClose = true
+	if !*org.MailBox.Address.isClose {
+		*org.MailBox.Address.isClose = true
+
 		// 关闭所有循环
 		org.T_T.CleanUpdates()
 		// 给所有好友发送我死了
@@ -149,7 +153,7 @@ func (this *leader) Dissolve() {
 			draft.Send()
 
 		}
-		// 关闭自己的邮箱
+
 		close(org.MailBox.Address.address)
 	}
 }
@@ -170,7 +174,7 @@ type mailBox struct {
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type MailBoxAddress struct {
 	address chan mail // 邮箱地址
-	isClose bool      // 是否邮箱地址已经被关闭
+	isClose *bool     // 是否邮箱地址已经被关闭
 }
 
 // 写邮件
