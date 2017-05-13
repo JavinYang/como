@@ -20,7 +20,7 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time
 	this.MailBox.Address.address = newMailBoxAddress
 	this.MailBox.acceptLine = make(chan bool, 0)
 	this.overtime = overtime
-	this.T_T.runningUpdates = make(map[UpdateId]*struct{})
+	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
 	return
 }
@@ -57,9 +57,9 @@ func (this *Provision) Terminate() {}
 
 // 组织领导
 type leader struct {
-	currentAcceptState bool                   // 是否接受受理了当前请求
-	updateNotify       chan func()            // 通知组织运行循环的通道
-	runningUpdates     map[UpdateId]*struct{} // 当前运行的附属循环
+	currentAcceptState bool              // 是否接受受理了当前请求
+	updateNotify       chan func()       // 通知组织运行循环的通道
+	runningUpdates     map[Uid]*struct{} // 当前运行的附属循环
 }
 
 // 是否同意本次请求
@@ -68,10 +68,10 @@ func (this *leader) isAccept() bool {
 }
 
 // 添加事物循环处理
-func (this *leader) AddUpdate(function func(), timestep time.Duration) (updateId UpdateId) {
+func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid) {
 	updateColseChan := make(chan struct{}, 0)
-	updateId = UpdateId{updateColseChan}
-	this.runningUpdates[updateId] = nil
+	uid = Uid{updateColseChan}
+	this.runningUpdates[uid] = nil
 	go func() {
 		for {
 			select {
@@ -90,13 +90,13 @@ func (this *leader) AddUpdate(function func(), timestep time.Duration) (updateId
 }
 
 // 清除事物循环处理
-func (this *leader) RemoveUpdate(updateId UpdateId) {
-	_, ok := this.runningUpdates[updateId]
+func (this *leader) RemoveUpdate(uid Uid) {
+	_, ok := this.runningUpdates[uid]
 	if !ok {
 		return
 	}
-	delete(this.runningUpdates, updateId)
-	close(updateId.updateColseChan)
+	delete(this.runningUpdates, uid)
+	close(uid.updateColseChan)
 	return
 }
 
@@ -155,7 +155,7 @@ func (this *leader) Dissolve() {
 }
 
 // 子循环标识符
-type UpdateId struct {
+type Uid struct {
 	updateColseChan chan struct{}
 }
 
