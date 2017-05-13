@@ -73,26 +73,28 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 	go func() {
 		for {
 			select {
-			case v, ok := <-newMailBoxAddress:
+			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
 					break
 				}
-				method, ok := planningMethodsMap[v.senderName]
+				method, ok := planningMethodsMap[mail.senderName]
 				if !ok {
-					v.acceptLine <- false
+					mail.acceptLine <- false
 					continue
 				}
-				org.deliverMailForMailBox(v)
+				org.deliverMailForMailBox(mail)
 				org.routineStart()
 				org.RoutineStart()
 				if !T_T.isAccept() {
-					v.acceptLine <- false
+					mail.acceptLine <- false
 					continue
 				}
-				v.acceptLine <- true
+				mail.acceptLine <- true
 				method()
 				org.RoutineEnd()
+			case function, _ := <-T_T.updateNotify:
+				function()
 			}
 		}
 	}()
@@ -163,24 +165,24 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 	go func() {
 		for {
 			select {
-			case v, ok := <-newMailBoxAddress:
+			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
 					return
 				}
-				method, ok := planningMethodsMap[v.senderName]
+				method, ok := planningMethodsMap[mail.senderName]
 				if !ok {
-					v.acceptLine <- false
+					mail.acceptLine <- false
 					continue
 				}
-				org.deliverMailForMailBox(v)
+				org.deliverMailForMailBox(mail)
 				org.routineStart()
 				org.RoutineStart()
 				if !T_T.isAccept() {
-					v.acceptLine <- false
+					mail.acceptLine <- false
 					continue
 				}
-				v.acceptLine <- true
+				mail.acceptLine <- true
 				method()
 				org.RoutineEnd()
 			case <-time.After(time.Second):

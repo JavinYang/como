@@ -7,11 +7,10 @@ import (
 
 // 组织规划
 type Provision struct {
-	T_T              leader                           // 领导
-	MailBox          mailBox                          // 邮箱
-	pactRegisterName string                           // 公约祖册名称
-	overtime         *time.Duration                   // 超时时间
-	runningUpdates   map[chan interface{}]interface{} // 当前运行附属的循环
+	T_T              leader         // 领导
+	MailBox          mailBox        // 邮箱
+	pactRegisterName string         // 公约注册名称
+	overtime         *time.Duration // 超时时间
 }
 
 // 初始化(框架内部使用)
@@ -21,6 +20,8 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time
 	this.MailBox.Address.address = newMailBoxAddress
 	this.MailBox.acceptLine = make(chan bool, 0)
 	this.overtime = overtime
+	this.T_T.runningUpdates = make(map[UpdateId]*struct{})
+	this.T_T.updateNotify = make(chan func(), 0)
 	return
 }
 
@@ -40,7 +41,7 @@ func (this *Provision) routineStart() {
 }
 
 // 初始化组织
-func (this *Provision) Init(...interface{}) {}
+func (this *Provision) Init(pars ...interface{}) {}
 
 // 例行公事开始
 func (this *Provision) RoutineStart() {}
@@ -56,7 +57,9 @@ func (this *Provision) Terminate() {}
 
 // 组织领导
 type leader struct {
-	currentAcceptState bool
+	currentAcceptState bool                   // 是否接受受理了当前请求
+	updateNotify       chan func()            // 通知组织运行循环的通道
+	runningUpdates     map[UpdateId]*struct{} // 当前运行的附属循环
 }
 
 // 是否同意本次请求
@@ -65,7 +68,45 @@ func (this *leader) isAccept() bool {
 }
 
 // 添加事物循环处理
-func (this *leader) AddUpdate() {}
+func (this *leader) AddUpdate(function func(), timestep time.Duration) (updateId UpdateId) {
+	updateColseChan := make(chan struct{}, 0)
+	updateId = UpdateId{updateColseChan}
+	this.runningUpdates[updateId] = nil
+	go func() {
+		for {
+			select {
+			case <-updateColseChan:
+				return
+			case <-time.After(timestep):
+				select {
+				case <-updateColseChan:
+					return
+				case this.updateNotify <- function:
+				}
+			}
+		}
+	}()
+	return
+}
+
+// 清除事物循环处理
+func (this *leader) RemoveUpdate(updateId UpdateId) {
+	_, ok := this.runningUpdates[updateId]
+	if !ok {
+		return
+	}
+	delete(this.runningUpdates, updateId)
+	close(updateId.updateColseChan)
+	return
+}
+
+// 清理所有子循环
+func (this *leader) CleanUpdates() {
+	for updateId, _ := range this.runningUpdates {
+		delete(this.runningUpdates, updateId)
+		close(updateId.updateColseChan)
+	}
+}
 
 // 拒绝本次服务
 func (this *leader) DenialService() {
@@ -94,6 +135,8 @@ func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(&*this))
 	if !org.MailBox.Address.isClose {
 		org.MailBox.Address.isClose = true
+		// 关闭所有循环
+		org.T_T.CleanUpdates()
 		// 给所有好友发送我死了
 		draft := org.MailBox.Write()
 		draft.senderName = "Info"
@@ -109,6 +152,11 @@ func (this *leader) Dissolve() {
 		// 关闭自己的邮箱
 		close(org.MailBox.Address.address)
 	}
+}
+
+// 子循环标识符
+type UpdateId struct {
+	updateColseChan chan struct{}
 }
 
 // 邮箱
@@ -174,7 +222,7 @@ type mail struct {
 	sendeeName    string                 // 收件人名字
 	content       interface{}            // 邮件内容
 	remarks       map[string]interface{} // 邮件备注
-	acceptLine    chan bool              // 请求专线用来等待收件方处理请求
+	acceptLine    chan bool              // 请求专线用来等待收件方受理请求
 }
 
 // 获取发件人地址
