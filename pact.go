@@ -185,6 +185,8 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 				mail.acceptLine <- true
 				method()
 				org.RoutineEnd()
+			case function, _ := <-T_T.updateNotify:
+				function()
 			case <-time.After(time.Second):
 				if overtime == 0 {
 					//告诉朋友我要死了
