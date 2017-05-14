@@ -77,7 +77,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 					T_T.Dissolve()
 					return
 				}
-				method, ok := planningMethodsMap[mail.senderName]
+				method, ok := planningMethodsMap[mail.sendeeName]
 				if !ok {
 					mail.acceptLine <- false
 					continue
@@ -133,10 +133,10 @@ func (this *dynamicPact) Join(registerName string, provision provision, mailLen 
 }
 
 // 获取新动态组织
-func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mailBoxAddress chan mail, ok bool) {
+func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
 	orgType, ok := this.orgsProvision[registerName]
 	if !ok {
-		return nil, false
+		return MailBoxAddress{}, false
 	}
 	overtime := this.overtime
 	orgReflect := reflect.New(orgType)
@@ -169,7 +169,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 					T_T.Dissolve()
 					return
 				}
-				method, ok := planningMethodsMap[mail.senderName]
+				method, ok := planningMethodsMap[mail.sendeeName]
 				if !ok {
 					mail.acceptLine <- false
 					continue
@@ -195,5 +195,5 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 		}
 	}()
 
-	return newMailBoxAddress, true
+	return MailBoxAddress{newMailBoxAddress, false}, true
 }

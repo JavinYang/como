@@ -20,6 +20,7 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time
 	newMailBoxAddress = make(chan mail, mailLen)
 	this.MailBox.Address.address = newMailBoxAddress
 	this.MailBox.acceptLine = make(chan bool, 0)
+	this.MailBox.AddressMap.addressMap = make(map[MailBoxAddress]*struct{})
 	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
@@ -145,6 +146,7 @@ func (this *leader) Dissolve() {
 		draft := org.MailBox.Write()
 		draft.senderName = "Info"
 		for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
+			fmt.Println("要死了")
 			draft.sendeeAddress = mailBoxAddress
 			draft.sendeeName = "Info"
 			closeRemark := make(map[string]interface{})
@@ -179,7 +181,7 @@ type MailBoxAddress struct {
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{senderAddress: this.Address, senderName: this.Read().sendeeName}
+	return draft{senderAddress: this.Address, senderName: this.Read().sendeeName, acceptLine: this.acceptLine}
 }
 
 // 读邮件
