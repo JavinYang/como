@@ -74,7 +74,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
-					T_T.Dissolve()
+					T_T.goodByeMyFriends()
 					return
 				}
 				method, ok := planningMethodsMap[mail.sendeeName]
@@ -100,12 +100,10 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 }
 
 // 查询静态组织邮箱地址
-func (this *staticPact) FindMailBoxAddress(RegisterName string) chan mail {
-	mailBoxAddress, ok := this.orgsMailBoxAddress[RegisterName]
-	if ok {
-		return mailBoxAddress
-	}
-	return nil
+func (this *staticPact) FindMailBoxAddress(RegisterName string) (mailBoxAddress MailBoxAddress, ok bool) {
+	findMailBoxAddress, ok := this.orgsMailBoxAddress[RegisterName]
+	mailBoxAddress = MailBoxAddress{findMailBoxAddress, false}
+	return
 }
 
 // 动态组织公约
@@ -166,7 +164,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 			case mail, ok := <-newMailBoxAddress:
 				if !ok {
 					org.Terminate()
-					T_T.Dissolve()
+					T_T.goodByeMyFriends()
 					return
 				}
 				method, ok := planningMethodsMap[mail.sendeeName]

@@ -143,21 +143,24 @@ func (this *leader) Dissolve() {
 		// 关闭所有循环
 		org.T_T.CleanUpdates()
 		// 给所有好友发送我死了
-		draft := org.MailBox.Write()
-		draft.senderName = "Info"
-		for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
-			fmt.Println("要死了")
-			draft.sendeeAddress = mailBoxAddress
-			draft.sendeeName = "Info"
-			closeRemark := make(map[string]interface{})
-			closeRemark["Close"] = nil
-			draft.remarks = closeRemark
-			draft.Send()
-
-		}
-
 		close(org.MailBox.Address.address)
 	}
+}
+
+// 跟所有朋友告别(框架内部使用)
+func (this *leader) goodByeMyFriends() {
+	org := (*Provision)(unsafe.Pointer(&*this))
+	draft := org.MailBox.Write()
+	draft.senderName = "Info"
+	for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
+		draft.sendeeAddress = mailBoxAddress
+		draft.sendeeName = "Info"
+		closeRemark := make(map[string]interface{})
+		closeRemark["Close"] = nil
+		draft.remarks = closeRemark
+		draft.Send()
+	}
+
 }
 
 // 子循环标识符
