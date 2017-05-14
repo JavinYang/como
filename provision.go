@@ -308,7 +308,12 @@ func (this draft) Send() (ok bool) {
 		return false
 	}
 
+	if this.sendeeAddress.address == this.senderAddress.address {
+		panic("自己不能给自己发邮件!")
+	}
+
 	this.sendeeAddress.address <- mail(this)
+
 	ok = <-this.acceptLine
 
 	return

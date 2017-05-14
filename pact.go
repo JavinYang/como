@@ -11,7 +11,7 @@ var Pact *pacts
 // 初始化公约实例
 func init() {
 	staticOrg := &staticPact{orgsMailBoxAddress: make(map[string]chan mail)}
-	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]provision)}
+	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]reflect.Type)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
 
@@ -50,8 +50,6 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 	newMailBoxAddress := org.init(registerName, mailLen, nil)
 	this.orgsMailBoxAddress[registerName] = newMailBoxAddress
 
-	org.Init(initPars)
-
 	orgReflect := reflect.ValueOf(org)
 
 	planningMethodsMap := make(map[string]func())
@@ -70,6 +68,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 
 	T_T := org.getLeader()
 	go func() {
+		org.Init(initPars...)
 		for {
 			select {
 			case mail, ok := <-newMailBoxAddress:
@@ -111,7 +110,7 @@ func (this *staticPact) FindMailBoxAddress(RegisterName string) chan mail {
 
 // 动态组织公约
 type dynamicPact struct {
-	orgsProvision map[string]provision
+	orgsProvision map[string]reflect.Type
 	overtime      time.Duration
 	mailLen       int
 }
@@ -128,23 +127,21 @@ func (this *dynamicPact) Join(registerName string, provision provision, mailLen 
 		panic("已经存在叫做" + registerName + "的动态组织")
 		return
 	}
-	this.orgsProvision[registerName] = provision
+	this.orgsProvision[registerName] = reflect.Indirect(reflect.ValueOf(provision)).Type()
 	this.mailLen = mailLen
 	this.overtime = overtime
 }
 
 // 获取新动态组织
 func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mailBoxAddress chan mail, ok bool) {
-	org, ok := this.orgsProvision[registerName]
+	orgType, ok := this.orgsProvision[registerName]
 	if !ok {
 		return nil, false
 	}
 	overtime := this.overtime
+	orgReflect := reflect.New(orgType)
+	org := orgReflect.Interface().(provision)
 	newMailBoxAddress := org.init(registerName, this.mailLen, &overtime)
-
-	org.Init(initPars)
-
-	orgReflect := reflect.ValueOf(org)
 
 	planningMethodsMap := make(map[string]func())
 	numMethod := orgReflect.NumMethod()
@@ -163,6 +160,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 	T_T := org.getLeader()
 
 	go func() {
+		org.Init(initPars...)
 		for {
 			select {
 			case mail, ok := <-newMailBoxAddress:
