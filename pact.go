@@ -1,6 +1,7 @@
 package como
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 )
@@ -167,6 +168,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 					T_T.goodByeMyFriends()
 					return
 				}
+
 				method, ok := planningMethodsMap[mail.sendeeName]
 				if !ok {
 					mail.acceptLine <- false

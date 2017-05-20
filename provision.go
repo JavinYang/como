@@ -156,11 +156,10 @@ func (this *leader) goodByeMyFriends() {
 		draft.sendeeAddress = mailBoxAddress
 		draft.sendeeName = "Info"
 		closeRemark := make(map[string]interface{})
-		closeRemark["Close"] = nil
+		closeRemark["GoodBye"] = nil
 		draft.remarks = closeRemark
 		draft.Send()
 	}
-
 }
 
 // 子循环标识符
@@ -184,7 +183,7 @@ type MailBoxAddress struct {
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{senderAddress: this.Address, senderName: this.Read().sendeeName, acceptLine: this.acceptLine}
+	return draft{senderAddress: this.Address, senderName: this.mail.sendeeName, acceptLine: this.acceptLine}
 }
 
 // 读邮件
@@ -256,12 +255,13 @@ func (this *mail) GetRemarks() map[string]interface{} {
 }
 
 // 回复
-func (this mail) Reply(senderName string) draft {
+func (this mail) Reply(sendeeName string) draft {
 	draft := draft(this)
+	senderAddress := draft.senderAddress
 	draft.senderAddress = draft.sendeeAddress
-	draft.senderName = draft.senderName
-	draft.sendeeAddress = draft.senderAddress
-	draft.sendeeName = senderName
+	draft.senderName = draft.sendeeName
+	draft.sendeeAddress = senderAddress
+	draft.sendeeName = sendeeName
 	draft.content = nil
 	draft.remarks = nil
 	return draft
@@ -314,7 +314,7 @@ func (this draft) Send() (ok bool) {
 	}
 
 	if this.sendeeAddress.address == this.senderAddress.address {
-		panic("自己不能给自己发邮件!")
+		fmt.Println("自己不能给自己发邮件!")
 	}
 
 	this.sendeeAddress.address <- mail(this)
