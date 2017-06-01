@@ -1,7 +1,7 @@
 package como
 
 import (
-	"fmt"
+	"sync"
 	"time"
 	"unsafe"
 )
@@ -15,16 +15,18 @@ type Provision struct {
 }
 
 // 初始化(框架内部使用)
-func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time.Duration) (newMailBoxAddress chan mail) {
+func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time.Duration) (newMailBoxAddress MailBoxAddress) {
 	this.pactRegisterName = pactRegisterName
-	newMailBoxAddress = make(chan mail, mailLen)
-	this.MailBox.Address.address = newMailBoxAddress
+	this.MailBox.Address.address = make(chan mail, mailLen)
+	this.MailBox.Address.mutex = &sync.Mutex{}
+	isShut := false
+	this.MailBox.Address.isShut = &isShut
 	this.MailBox.acceptLine = make(chan bool, 0)
 	this.MailBox.AddressMap.addressMap = make(map[MailBoxAddress]*struct{})
 	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
-	return
+	return this.MailBox.Address
 }
 
 // 投递邮件到邮箱(框架内部使用)
@@ -135,16 +137,8 @@ func (this *leader) SetRemainingTime(newOvertime time.Duration) {
 // 解散组织
 func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(&*this))
-	fmt.Println(org.MailBox.Address.isClose)
-	// isClose可能被GC 因为最后关闭了邮箱地址
-	if !org.MailBox.Address.isClose {
-		org.MailBox.Address.isClose = true
-
-		// 关闭所有循环
-		org.T_T.CleanUpdates()
-		// 给所有好友发送我死了
-		close(org.MailBox.Address.address)
-	}
+	org.MailBox.Address.shut()
+	org.T_T.CleanUpdates()
 }
 
 // 跟所有朋友告别(框架内部使用)
@@ -177,8 +171,9 @@ type mailBox struct {
 
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type MailBoxAddress struct {
+	mutex   *sync.Mutex
 	address chan mail // 邮箱地址
-	isClose bool      // 是否邮箱地址已经被关闭
+	isShut  *bool     // 是否邮箱地址已经被关闭
 }
 
 // 写邮件
@@ -189,6 +184,35 @@ func (this *mailBox) Write() draft {
 // 读邮件
 func (this *mailBox) Read() mail {
 	return this.mail // 这里是否会读到同一封邮件?!!!
+}
+
+// 关闭邮箱
+func (this *MailBoxAddress) shut() {
+	this.mutex.Lock()
+	if *this.isShut == true {
+		return
+	}
+	close(this.address)
+	*this.isShut = true
+	this.mutex.Unlock()
+}
+
+// 把数据放入邮箱
+func (this *MailBoxAddress) send(mail mail) (isShut bool) {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+	if *this.isShut == true {
+		return true
+	}
+	this.address <- mail
+	return false
+}
+
+// 邮箱是否关闭?
+func (this *MailBoxAddress) IsShut() bool {
+	this.mutex.Lock()
+	defer this.mutex.Unlock()
+	return *this.isShut
 }
 
 // 通讯录
@@ -251,7 +275,6 @@ func (this *mail) GetContent() interface{} {
 // 获取邮件注释
 func (this *mail) GetRemarks() map[string]interface{} {
 	return this.remarks
-
 }
 
 // 回复
@@ -303,23 +326,18 @@ func (this *draft) SetRemarks(remarks map[string]interface{}) {
 // 发送草稿(如果发送的地址或者接收人不存在返回false)
 func (this draft) Send() (ok bool) {
 
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-
 	if this.sendeeAddress.address == nil {
 		return false
 	}
 
 	if this.sendeeAddress.address == this.senderAddress.address {
-		fmt.Println("自己不能给自己发邮件!")
+		panic("自己不能给自己发邮件!")
 	}
 
-	this.sendeeAddress.address <- mail(this)
-
-	ok = <-this.acceptLine
+	isClose := this.sendeeAddress.send(mail(this))
+	if !isClose {
+		ok = <-this.acceptLine
+	}
 
 	return
 }

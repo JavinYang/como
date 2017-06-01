@@ -10,7 +10,7 @@ var Pact *pacts
 
 // 初始化公约实例
 func init() {
-	staticOrg := &staticPact{orgsMailBoxAddress: make(map[string]chan mail)}
+	staticOrg := &staticPact{orgsMailBoxAddress: make(map[string]MailBoxAddress)}
 	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]reflect.Type)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
@@ -23,7 +23,7 @@ type pacts struct {
 
 // 组织规定规范
 type provision interface {
-	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress chan mail)
+	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress MailBoxAddress)
 	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
@@ -36,7 +36,7 @@ type provision interface {
 
 // 静态组织公约
 type staticPact struct {
-	orgsMailBoxAddress map[string]chan mail
+	orgsMailBoxAddress map[string]MailBoxAddress
 }
 
 // 加入静态组织
@@ -71,7 +71,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 		org.Init(initPars...)
 		for {
 			select {
-			case mail, ok := <-newMailBoxAddress:
+			case mail, ok := <-newMailBoxAddress.address:
 				if !ok {
 					org.Terminate()
 					T_T.goodByeMyFriends()
@@ -101,8 +101,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 
 // 查询静态组织邮箱地址
 func (this *staticPact) FindMailBoxAddress(RegisterName string) (mailBoxAddress MailBoxAddress, ok bool) {
-	findMailBoxAddress, ok := this.orgsMailBoxAddress[RegisterName]
-	mailBoxAddress = MailBoxAddress{findMailBoxAddress, false}
+	mailBoxAddress, ok = this.orgsMailBoxAddress[RegisterName]
 	return
 }
 
@@ -161,7 +160,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 		org.Init(initPars...)
 		for {
 			select {
-			case mail, ok := <-newMailBoxAddress:
+			case mail, ok := <-newMailBoxAddress.address:
 				if !ok {
 					org.Terminate()
 					T_T.goodByeMyFriends()
@@ -193,6 +192,5 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 			}
 		}
 	}()
-
-	return MailBoxAddress{newMailBoxAddress, false}, true
+	return newMailBoxAddress, true
 }
