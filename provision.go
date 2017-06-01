@@ -334,8 +334,8 @@ func (this draft) Send() (ok bool) {
 		panic("自己不能给自己发邮件!")
 	}
 
-	isClose := this.sendeeAddress.send(mail(this))
-	if !isClose {
+	isShut := this.sendeeAddress.send(mail(this))
+	if !isShut {
 		ok = <-this.acceptLine
 	}
 
