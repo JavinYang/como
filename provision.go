@@ -113,13 +113,13 @@ func (this *leader) CleanUpdates() {
 }
 
 // 拒绝本次服务
-func (this *leader) DenialService() {
+func (this *leader) DenyService() {
 	this.currentAcceptState = false
 }
 
 // 获取超时时间
 func (this *leader) GetOvertime() time.Duration {
-	org := (*Provision)(unsafe.Pointer(&*this))
+	org := (*Provision)(unsafe.Pointer(this))
 	if org.overtime == nil {
 		return -1
 	}
@@ -127,8 +127,8 @@ func (this *leader) GetOvertime() time.Duration {
 }
 
 // 设置超时时间
-func (this *leader) SetRemainingTime(newOvertime time.Duration) {
-	org := (*Provision)(unsafe.Pointer(&*this))
+func (this *leader) SetOvertime(newOvertime time.Duration) {
+	org := (*Provision)(unsafe.Pointer(this))
 	if org.overtime != nil {
 		*org.overtime = newOvertime
 	}
@@ -136,14 +136,14 @@ func (this *leader) SetRemainingTime(newOvertime time.Duration) {
 
 // 解散组织
 func (this *leader) Dissolve() {
-	org := (*Provision)(unsafe.Pointer(&*this))
+	org := (*Provision)(unsafe.Pointer(this))
 	org.MailBox.Address.shut()
 	org.T_T.CleanUpdates()
 }
 
 // 跟所有朋友告别(框架内部使用)
 func (this *leader) goodByeMyFriends() {
-	org := (*Provision)(unsafe.Pointer(&*this))
+	org := (*Provision)(unsafe.Pointer(this))
 	draft := org.MailBox.Write()
 	draft.senderName = "Info"
 	for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
