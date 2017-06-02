@@ -130,6 +130,9 @@ func (this *leader) GetOvertime() int64 {
 func (this *leader) SetOvertime(newOvertime int64) {
 	org := (*Provision)(unsafe.Pointer(this))
 	if org.overtime != nil {
+		if newOvertime < 0 {
+			newOvertime = 0
+		}
 		*org.overtime = newOvertime
 	}
 }
