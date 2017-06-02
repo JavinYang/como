@@ -8,14 +8,14 @@ import (
 
 // 组织规划
 type Provision struct {
-	T_T              leader         // 领导
-	MailBox          mailBox        // 邮箱
-	pactRegisterName string         // 公约注册名称
-	overtime         *time.Duration // 超时时间
+	T_T              leader  // 领导
+	MailBox          mailBox // 邮箱
+	pactRegisterName string  // 公约注册名称
+	overtime         *int64  // 超时时间
 }
 
 // 初始化(框架内部使用)
-func (this *Provision) init(pactRegisterName string, mailLen int, overtime *time.Duration) (newMailBoxAddress MailBoxAddress) {
+func (this *Provision) init(pactRegisterName string, mailLen int, overtime *int64) (newMailBoxAddress MailBoxAddress) {
 	this.pactRegisterName = pactRegisterName
 	this.MailBox.Address.address = make(chan mail, mailLen)
 	this.MailBox.Address.mutex = &sync.Mutex{}
@@ -118,7 +118,7 @@ func (this *leader) DenyService() {
 }
 
 // 获取超时时间
-func (this *leader) GetOvertime() time.Duration {
+func (this *leader) GetOvertime() int64 {
 	org := (*Provision)(unsafe.Pointer(this))
 	if org.overtime == nil {
 		return -1
@@ -127,7 +127,7 @@ func (this *leader) GetOvertime() time.Duration {
 }
 
 // 设置超时时间
-func (this *leader) SetOvertime(newOvertime time.Duration) {
+func (this *leader) SetOvertime(newOvertime int64) {
 	org := (*Provision)(unsafe.Pointer(this))
 	if org.overtime != nil {
 		*org.overtime = newOvertime

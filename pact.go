@@ -23,7 +23,7 @@ type pacts struct {
 
 // 组织规定规范
 type provision interface {
-	init(pactRegisterName string, mailLen int, overTime *time.Duration) (newMailBoxAddress MailBoxAddress)
+	init(pactRegisterName string, mailLen int, overTime *int64) (newMailBoxAddress MailBoxAddress)
 	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
@@ -108,12 +108,12 @@ func (this *staticPact) FindMailBoxAddress(RegisterName string) (mailBoxAddress 
 // 动态组织公约
 type dynamicPact struct {
 	orgsProvision map[string]reflect.Type
-	overtime      time.Duration
+	overtime      int64
 	mailLen       int
 }
 
 // 加入动态组织
-func (this *dynamicPact) Join(registerName string, provision provision, mailLen int, overtime time.Duration) {
+func (this *dynamicPact) Join(registerName string, provision provision, mailLen int, overtime int64) {
 
 	if overtime < 0 || overtime == 0 {
 		panic(registerName + "加入动态组织的overtime不能<=0因为着没有意义")
