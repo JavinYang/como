@@ -77,7 +77,7 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 					T_T.goodByeMyFriends()
 					return
 				}
-				method, ok := planningMethodsMap[mail.sendeeName]
+				method, ok := planningMethodsMap[mail.recipientName]
 				if !ok {
 					mail.acceptLine <- false
 					continue
@@ -167,7 +167,7 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 					return
 				}
 
-				method, ok := planningMethodsMap[mail.sendeeName]
+				method, ok := planningMethodsMap[mail.recipientName]
 				if !ok {
 					mail.acceptLine <- false
 					continue
