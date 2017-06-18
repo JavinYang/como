@@ -330,9 +330,5 @@ func (this draft) Send() (ok bool) {
 		return false
 	}
 
-	if this.recipientAddress.address == this.senderAddress.address {
-		panic("自己不能给自己发邮件!")
-	}
-
 	return this.recipientAddress.send(mail(this))
 }
