@@ -79,17 +79,14 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 				}
 				method, ok := planningMethodsMap[mail.recipientName]
 				if !ok {
-					mail.acceptLine <- false
 					continue
 				}
 				org.deliverMailForMailBox(mail)
 				org.routineStart()
 				org.RoutineStart()
 				if !T_T.isAccept() {
-					mail.acceptLine <- false
 					continue
 				}
-				mail.acceptLine <- true
 				method()
 				org.RoutineEnd()
 			case function, _ := <-T_T.updateNotify:
@@ -169,17 +166,14 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 
 				method, ok := planningMethodsMap[mail.recipientName]
 				if !ok {
-					mail.acceptLine <- false
 					continue
 				}
 				org.deliverMailForMailBox(mail)
 				org.routineStart()
 				org.RoutineStart()
 				if !T_T.isAccept() {
-					mail.acceptLine <- false
 					continue
 				}
-				mail.acceptLine <- true
 				method()
 				org.RoutineEnd()
 			case function, _ := <-T_T.updateNotify:

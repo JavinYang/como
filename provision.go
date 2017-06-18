@@ -21,7 +21,6 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *int6
 	this.MailBox.Address.mutex = &sync.Mutex{}
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
-	this.MailBox.acceptLine = make(chan bool, 0)
 	this.MailBox.AddressMap.addressMap = make(map[MailBoxAddress]*struct{})
 	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
@@ -169,12 +168,11 @@ type mailBox struct {
 	mail       mail           // 邮件
 	Address    MailBoxAddress // 邮箱地址
 	AddressMap addressMap     // 通讯录
-	acceptLine chan bool      // 询问别的组织受理用专线
 }
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{senderAddress: this.Address, senderName: this.mail.recipientName, acceptLine: this.acceptLine}
+	return draft{senderAddress: this.Address, senderName: this.mail.recipientName}
 }
 
 // 读邮件
@@ -185,37 +183,37 @@ func (this *mailBox) Read() mail {
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type MailBoxAddress struct {
 	mutex   *sync.Mutex
-	address chan mail // 邮箱地址
 	isShut  *bool     // 是否邮箱地址已经被关闭
+	address chan mail // 邮箱地址
 }
 
 // 关闭邮箱
 func (this *MailBoxAddress) shut() {
-	this.mutex.Lock()
-	if *this.isShut == true {
+	this.mutex.Lock()         // 加锁
+	if *this.isShut == true { // 如果当前邮箱已经关闭直接返回
 		return
 	}
-	close(this.address)
-	*this.isShut = true
-	this.mutex.Unlock()
+	close(this.address) // 关闭邮箱
+	*this.isShut = true // 否则设置当前邮箱已关闭
+	this.mutex.Unlock() // 解锁
 }
 
 // 把数据放入邮箱
 func (this *MailBoxAddress) send(mail mail) (isShut bool) {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-	if *this.isShut == true {
+	this.mutex.Lock()         // 加锁
+	defer this.mutex.Unlock() // 函数结束自动解锁
+	if *this.isShut == true { // 如果当前函数已经关闭返回关闭
 		return true
 	}
-	this.address <- mail
-	return false
+	this.address <- mail // 否则发送数据
+	return false         // 返回没有关闭
 }
 
 // 邮箱是否关闭?
 func (this *MailBoxAddress) IsShut() bool {
-	this.mutex.Lock()
-	defer this.mutex.Unlock()
-	return *this.isShut
+	this.mutex.Lock()         // 加锁
+	defer this.mutex.Unlock() // 函数结束自动解锁
+	return *this.isShut       // 返回邮箱状态
 }
 
 // 通讯录
@@ -257,7 +255,6 @@ type mail struct {
 	recipientName    string                 // 收件人名字
 	content          interface{}            // 邮件内容
 	remarks          map[string]interface{} // 邮件备注
-	acceptLine       chan bool              // 请求专线用来等待收件方受理请求
 }
 
 // 获取发件人地址
@@ -312,7 +309,7 @@ func (this *draft) SetRecipientAddress(mailBoxAddress MailBoxAddress) {
 }
 
 // 设置收件人名字
-func (this *draft) SetSendeeName(sendeeName string) {
+func (this *draft) SetRecipientName(sendeeName string) {
 	this.recipientName = sendeeName
 }
 
@@ -337,10 +334,5 @@ func (this draft) Send() (ok bool) {
 		panic("自己不能给自己发邮件!")
 	}
 
-	isShut := this.recipientAddress.send(mail(this))
-	if !isShut {
-		ok = <-this.acceptLine
-	}
-
-	return
+	return this.recipientAddress.send(mail(this))
 }
