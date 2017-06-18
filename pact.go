@@ -11,7 +11,7 @@ var Pact *pacts
 // 初始化公约实例
 func init() {
 	staticOrg := &staticPact{orgsMailBoxAddress: make(map[string]MailBoxAddress)}
-	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]reflect.Type)}
+	dynamicOrg := &dynamicPact{orgsProvision: make(map[string]dynamicOrgInfo)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
 
@@ -39,7 +39,7 @@ type staticPact struct {
 	orgsMailBoxAddress map[string]MailBoxAddress
 }
 
-// 加入静态组织
+// 公开加入静态组织
 func (this *staticPact) Join(registerName string, org provision, mailLen int, initPars ...interface{}) {
 	_, ok := this.orgsMailBoxAddress[registerName]
 	if ok {
@@ -50,6 +50,17 @@ func (this *staticPact) Join(registerName string, org provision, mailLen int, in
 	newMailBoxAddress := org.init(registerName, mailLen, nil)
 	this.orgsMailBoxAddress[registerName] = newMailBoxAddress
 
+	this.run(newMailBoxAddress, org, initPars...)
+}
+
+// 匿名加入静态组织
+func (this *staticPact) JoinAnonymous(org provision, mailLen int, initPars ...interface{}) {
+	newMailBoxAddress := org.init("", mailLen, nil)
+	this.run(newMailBoxAddress, org, initPars...)
+}
+
+// 运行静态组织
+func (this *staticPact) run(newMailBoxAddress MailBoxAddress, org provision, initPars ...interface{}) {
 	orgReflect := reflect.ValueOf(org)
 
 	planningMethodsMap := make(map[string]func())
@@ -104,9 +115,14 @@ func (this *staticPact) FindMailBoxAddress(RegisterName string) (mailBoxAddress 
 
 // 动态组织公约
 type dynamicPact struct {
-	orgsProvision map[string]reflect.Type
-	overtime      int64
-	mailLen       int
+	orgsProvision map[string]dynamicOrgInfo
+}
+
+// 动态组织信息
+type dynamicOrgInfo struct {
+	orgType  reflect.Type
+	mailLen  int
+	overtime int64
 }
 
 // 加入动态组织
@@ -119,24 +135,34 @@ func (this *dynamicPact) Join(registerName string, provision provision, mailLen 
 	_, ok := this.orgsProvision[registerName]
 	if ok {
 		panic("已经存在叫做" + registerName + "的动态组织")
-		return
 	}
-	this.orgsProvision[registerName] = reflect.Indirect(reflect.ValueOf(provision)).Type()
-	this.mailLen = mailLen
-	this.overtime = overtime
+	this.orgsProvision[registerName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(provision)).Type(), mailLen, overtime}
 }
 
-// 获取新动态组织
-func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
-	orgType, ok := this.orgsProvision[registerName]
+// 用名字生成动态组织
+func (this *dynamicPact) Generate(registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+	dynamicOrgInfo, ok := this.orgsProvision[registerName]
 	if !ok {
 		return MailBoxAddress{}, false
 	}
-	overtime := this.overtime
-	orgReflect := reflect.New(orgType)
+	overtime := dynamicOrgInfo.overtime
+	orgReflect := reflect.New(dynamicOrgInfo.orgType)
 	org := orgReflect.Interface().(provision)
-	newMailBoxAddress := org.init(registerName, this.mailLen, &overtime)
+	newMailBoxAddress := org.init(registerName, dynamicOrgInfo.mailLen, &overtime)
+	this.run(newMailBoxAddress, orgReflect, org, overtime, initPars...)
+	return newMailBoxAddress, true
+}
 
+// 创建一个新动态组织
+func (this *dynamicPact) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+	newMailBoxAddress := org.init("", mailLen, &overtime)
+	orgReflect := reflect.ValueOf(org)
+	this.run(newMailBoxAddress, orgReflect, org, overtime, initPars...)
+	return newMailBoxAddress, true
+}
+
+// 运行动态组织
+func (this *dynamicPact) run(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, overtime int64, initPars ...interface{}) {
 	planningMethodsMap := make(map[string]func())
 	numMethod := orgReflect.NumMethod()
 	for i := 0; i < numMethod; i++ {
@@ -186,5 +212,4 @@ func (this *dynamicPact) New(registerName string, initPars ...interface{}) (mail
 			}
 		}
 	}()
-	return newMailBoxAddress, true
 }

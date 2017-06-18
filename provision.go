@@ -190,12 +190,12 @@ type MailBoxAddress struct {
 // 关闭邮箱
 func (this *MailBoxAddress) shut() {
 	this.mutex.Lock()         // 加锁
+	defer this.mutex.Unlock() // 解锁
 	if *this.isShut == true { // 如果当前邮箱已经关闭直接返回
 		return
 	}
 	close(this.address) // 关闭邮箱
 	*this.isShut = true // 否则设置当前邮箱已关闭
-	this.mutex.Unlock() // 解锁
 }
 
 // 把数据放入邮箱
@@ -279,25 +279,25 @@ func (this *mail) GetRemarks() map[string]interface{} {
 
 // 回复
 func (this mail) Reply(recipientName string) draft {
-	draft := draft(this)
-	senderAddress := draft.senderAddress
-	draft.senderAddress = draft.recipientAddress
-	draft.senderName = draft.recipientName
-	draft.recipientAddress = senderAddress
-	draft.recipientName = recipientName
-	draft.content = nil
-	draft.remarks = nil
-	return draft
+	draft := draft(this)                         // 创建新草稿
+	senderAddress := draft.senderAddress         // 临时储存发送者
+	draft.senderAddress = draft.recipientAddress // 接收地址变成发送地址
+	draft.senderName = draft.recipientName       // 接收人变成发送人
+	draft.recipientAddress = senderAddress       // 发送地址变成接收地址
+	draft.recipientName = recipientName          // 设置接收人
+	draft.content = nil                          // 内容待设置
+	draft.remarks = nil                          // 注释待设置
+	return draft                                 // 返回这个草稿
 }
 
 // 转发
-func (this mail) Forward() draft {
-	draft := draft(this)
-	draft.senderAddress = draft.recipientAddress
-	draft.senderName = draft.senderName
-	draft.recipientAddress = MailBoxAddress{}
-	draft.recipientName = ""
-	return draft
+func (this mail) Forward(recipientAddress MailBoxAddress, recipientName string) draft {
+	draft := draft(this)                         // 创建新草稿
+	draft.senderAddress = draft.recipientAddress // 接收地址变成发送地址
+	draft.senderName = draft.recipientName       // 接收人变成发送人
+	draft.recipientAddress = recipientAddress    // 设置接收地址
+	draft.recipientName = recipientName          // 设置接收人
+	return draft                                 // 返回这个草稿
 }
 
 // 草稿
