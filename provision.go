@@ -21,7 +21,7 @@ func (this *Provision) init(pactRegisterName string, mailLen int, overtime *int6
 	this.MailBox.Address.mutex = &sync.Mutex{}
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
-	this.MailBox.AddressMap.addressMap = make(map[MailBoxAddress]*struct{})
+	this.MailBox.AddressMap.addressMap = make(map[string][]MailBoxAddress)
 	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
@@ -148,13 +148,15 @@ func (this *leader) goodByeMyFriends() {
 	org := (*Provision)(unsafe.Pointer(this))
 	draft := org.MailBox.Write()
 	draft.senderName = "Info"
-	for mailBoxAddress, _ := range org.MailBox.AddressMap.addressMap {
-		draft.recipientAddress = mailBoxAddress
-		draft.recipientName = "Info"
-		closeRemark := make(map[string]interface{})
-		closeRemark["GoodBye"] = nil
-		draft.remarks = closeRemark
-		draft.Send()
+	for _, mailBoxsAddress := range org.MailBox.AddressMap.addressMap {
+		for _, mailBoxAddress := range mailBoxsAddress {
+			draft.recipientAddress = mailBoxAddress
+			draft.recipientName = "Info"
+			closeRemark := make(map[string]interface{})
+			closeRemark["GoodBye"] = nil
+			draft.remarks = closeRemark
+			draft.Send()
+		}
 	}
 }
 
@@ -218,33 +220,65 @@ func (this *MailBoxAddress) IsShut() bool {
 
 // 通讯录
 type addressMap struct {
-	addressMap map[MailBoxAddress]*struct{}
+	addressMap map[string][]MailBoxAddress
 }
 
 // 添加好友
-func (this *addressMap) AddFriend(mailBoxAddress MailBoxAddress) {
-	this.addressMap[mailBoxAddress] = nil
+func (this *addressMap) AddFriend(friendName string, mailBoxAddress MailBoxAddress) {
+	mailBoxsAddress, ok := this.addressMap[friendName]
+	if !ok {
+		mailBoxsAddress = make([]MailBoxAddress, 0, 1)
+	}
+	this.addressMap[friendName] = append(mailBoxsAddress, mailBoxAddress)
+}
+
+// 用名字删除用户
+func (this *addressMap) RemoveFriendByName(friendName string) {
+	_, ok := this.addressMap[friendName]
+	if !ok {
+		return
+	}
+	delete(this.addressMap, friendName)
 }
 
 // 删除好友
 func (this *addressMap) RemoveFriend(mailBoxAddress MailBoxAddress) {
-	_, ok := this.addressMap[mailBoxAddress]
-	if !ok {
-		return
+	for friendName, mailBoxsAddress := range this.addressMap {
+		mailBoxsAddressLen := len(mailBoxsAddress)
+		for i := 0; i < mailBoxsAddressLen; i++ {
+			if mailBoxsAddress[i] == mailBoxAddress {
+				if mailBoxsAddressLen == 1 {
+					delete(this.addressMap, friendName)
+					return
+				}
+				mailBoxsAddress = append(mailBoxsAddress[:i], mailBoxsAddress[i+1:]...)
+			}
+		}
 	}
-	delete(this.addressMap, mailBoxAddress)
+}
+
+// 获取好友
+func (this *addressMap) GetFriend(friendName string) (mailBoxsAddress []MailBoxAddress, ok bool) {
+	mailBoxsAddress, ok = this.addressMap[friendName]
 	return
 }
 
-// 获取所有好友
-func (this *addressMap) GetAllFriends() []MailBoxAddress {
-	friendsAddress := make([]MailBoxAddress, len(this.addressMap))
-	i := 0
-	for address, _ := range this.addressMap {
-		friendsAddress[i] = address
-		i++
+// 检查好友名字
+func (this *addressMap) GetFriendName(mailBoxAddress MailBoxAddress) (friendName string, ok bool) {
+	for friendName, addresss := range this.addressMap {
+		for _, address := range addresss {
+			if address == mailBoxAddress {
+				return friendName, true
+			}
+		}
+
 	}
-	return friendsAddress
+	return "", false
+}
+
+// 获取所有好友
+func (this *addressMap) GetAllFriends() map[string][]MailBoxAddress {
+	return this.addressMap
 }
 
 // 邮件
