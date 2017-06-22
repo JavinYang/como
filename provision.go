@@ -116,6 +116,12 @@ func (this *leader) DenyService() {
 	this.currentAcceptState = false
 }
 
+// 获取注册名称
+func (this *leader) GetPactRegisterName() string {
+	org := (*Provision)(unsafe.Pointer(this))
+	return org.pactRegisterName
+}
+
 // 获取超时时间
 func (this *leader) GetOvertime() int64 {
 	org := (*Provision)(unsafe.Pointer(this))
@@ -257,9 +263,14 @@ func (this *addressMap) RemoveFriend(mailBoxAddress MailBoxAddress) {
 	}
 }
 
+// 删除所有好友
+func (this *addressMap) RemoveAllFriends() {
+	this.addressMap = make(map[string][]MailBoxAddress)
+}
+
 // 获取好友
-func (this *addressMap) GetFriend(friendName string) (mailBoxsAddress []MailBoxAddress, ok bool) {
-	mailBoxsAddress, ok = this.addressMap[friendName]
+func (this *addressMap) GetFriend(friendName string) (friendsMailBoxAddr []MailBoxAddress, ok bool) {
+	friendsMailBoxAddr, ok = this.addressMap[friendName]
 	return
 }
 
@@ -277,8 +288,14 @@ func (this *addressMap) GetFriendName(mailBoxAddress MailBoxAddress) (friendName
 }
 
 // 获取所有好友
-func (this *addressMap) GetAllFriends() map[string][]MailBoxAddress {
-	return this.addressMap
+func (this *addressMap) GetAllFriends() (friendsMailBoxAddr []MailBoxAddress) {
+	friendsMailBoxAddr = make([]MailBoxAddress, 0, 10)
+	for _, mailBoxsAddress := range this.addressMap {
+		for _, mailBoxAddress := range mailBoxsAddress {
+			friendsMailBoxAddr = append(friendsMailBoxAddr, mailBoxAddress)
+		}
+	}
+	return
 }
 
 // 邮件
@@ -304,6 +321,15 @@ func (this *mail) GetSenderName() string {
 // 获取邮件内容
 func (this *mail) GetContent() interface{} {
 	return this.content
+}
+
+// 获取一个邮件注释
+func (this *mail) GetRemark(key string) (val interface{}, ok bool) {
+	if this.remarks != nil {
+		val, ok = this.remarks[key]
+		return
+	}
+	return nil, false
 }
 
 // 获取邮件注释
@@ -355,6 +381,14 @@ func (this *draft) SetContent(content interface{}) {
 // 设置草稿备注
 func (this *draft) SetRemarks(remarks map[string]interface{}) {
 	this.remarks = remarks
+}
+
+// 添加草稿备注
+func (this *draft) AddRemark(key string, val interface{}) {
+	if this.remarks == nil {
+		this.remarks = make(map[string]interface{})
+	}
+	this.remarks[key] = val
 }
 
 // 发送草稿(如果发送的地址或者接收人不存在返回false)
