@@ -125,21 +125,17 @@ func (this *leader) GetPactRegisterName() string {
 // 获取超时时间
 func (this *leader) GetOvertime() int64 {
 	org := (*Provision)(unsafe.Pointer(this))
-	if org.overtime == nil {
-		return -1
-	}
 	return *org.overtime
 }
 
 // 设置超时时间
 func (this *leader) SetOvertime(newOvertime int64) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if org.overtime != nil {
-		if newOvertime < 0 {
-			newOvertime = 0
-		}
-		*org.overtime = newOvertime
+	if newOvertime < 0 {
+		newOvertime = -1
 	}
+	*org.overtime = newOvertime
+
 }
 
 // 解散组织
@@ -304,7 +300,7 @@ type mail struct {
 	senderName       string                 // 发件人名字
 	recipientAddress MailBoxAddress         // 收件人地址
 	recipientName    string                 // 收件人名字
-	content          interface{}            // 邮件内容
+	content          []interface{}          // 邮件内容
 	remarks          map[string]interface{} // 邮件备注
 }
 
@@ -319,7 +315,7 @@ func (this *mail) GetSenderName() string {
 }
 
 // 获取邮件内容
-func (this *mail) GetContent() interface{} {
+func (this *mail) GetContent() []interface{} {
 	return this.content
 }
 
@@ -374,7 +370,7 @@ func (this *draft) SetRecipientName(sendeeName string) {
 }
 
 // 设置草稿内容
-func (this *draft) SetContent(content interface{}) {
+func (this *draft) SetContent(content ...interface{}) {
 	this.content = content
 }
 
