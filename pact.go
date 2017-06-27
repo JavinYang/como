@@ -141,7 +141,7 @@ NEWORG:
 }
 
 // 生成已经加入的动态组织
-func (this *dynamicPact) Generate(groupName, registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *dynamicPact) New(groupName, registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
 	group, ok := this.groups[groupName]
 	if !ok {
 		return
