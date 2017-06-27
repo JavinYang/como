@@ -58,7 +58,7 @@ func (this *staticPact) Join(groupName, registerName string, org provision, mail
 	group, ok := this.groups[groupName]
 	if !ok {
 		group = make(map[string]MailBoxAddress)
-		goto NEWORG
+		goto NEW_ORG
 	}
 
 	_, ok = group[registerName]
@@ -67,7 +67,7 @@ func (this *staticPact) Join(groupName, registerName string, org provision, mail
 		return
 	}
 
-NEWORG:
+NEW_ORG:
 	var overtime int64 = -1
 	newMailBoxAddress := org.init(registerName, mailLen, &overtime)
 	group[registerName] = newMailBoxAddress
@@ -127,7 +127,7 @@ func (this *dynamicPact) Join(groupName, registerName string, provision provisio
 	group, ok := this.groups[groupName]
 	if !ok {
 		group = make(map[string]dynamicOrgInfo)
-		goto NEWORG
+		goto NEW_ORG
 	}
 
 	_, ok = group[registerName]
@@ -135,7 +135,7 @@ func (this *dynamicPact) Join(groupName, registerName string, provision provisio
 		panic("已经存在叫做" + registerName + "的动态组织")
 	}
 
-NEWORG:
+NEW_ORG:
 	group[registerName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(provision)).Type(), mailLen, overtime}
 	this.groups[groupName] = group
 }
