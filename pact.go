@@ -23,7 +23,7 @@ type pacts struct {
 
 // 创建一个新动态组织带超时控制 overtime == -1 时永不超时
 func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
-	newMailBoxAddress := org.init("", mailLen, &overtime)
+	newMailBoxAddress := org.init("", "", mailLen, &overtime)
 	orgReflect := reflect.ValueOf(org)
 	if overtime == -1 {
 		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
@@ -36,11 +36,10 @@ func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...i
 
 // 组织规定规范
 type provision interface {
-	init(pactRegisterName string, mailLen int, overTime *int64) (newMailBoxAddress MailBoxAddress)
+	init(pactGroupName, pactRegisterName string, mailLen int, overTime *int64) (newMailBoxAddress MailBoxAddress)
 	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
-	Info()
 	routineStart()
 	RoutineStart()
 	RoutineEnd()
@@ -53,7 +52,7 @@ type staticPact struct {
 }
 
 // 公开加入静态组织
-func (this *staticPact) Join(groupName, registerName string, org provision, mailLen int, initPars ...interface{}) {
+func (this *staticPact) Join(groupName, orgName string, org provision, mailLen int, initPars ...interface{}) {
 
 	group, ok := this.groups[groupName]
 	if !ok {
@@ -61,16 +60,16 @@ func (this *staticPact) Join(groupName, registerName string, org provision, mail
 		goto NEW_ORG
 	}
 
-	_, ok = group[registerName]
+	_, ok = group[orgName]
 	if ok {
-		panic("组" + groupName + "已经存在叫做" + registerName + "的静态组织")
+		panic("组" + groupName + "已经存在叫做" + orgName + "的静态组织")
 		return
 	}
 
 NEW_ORG:
 	var overtime int64 = -1
-	newMailBoxAddress := org.init(registerName, mailLen, &overtime)
-	group[registerName] = newMailBoxAddress
+	newMailBoxAddress := org.init(groupName, orgName, mailLen, &overtime)
+	group[orgName] = newMailBoxAddress
 	this.groups[groupName] = group
 	orgReflect := reflect.ValueOf(org)
 
@@ -78,12 +77,12 @@ NEW_ORG:
 }
 
 // 查询静态组织邮箱地址
-func (this *staticPact) FindMailBoxAddress(groupName, RegisterName string) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *staticPact) FindMailBoxAddress(groupName, orgName string) (mailBoxAddress MailBoxAddress, ok bool) {
 	orgsMailBoxAddress, ok := this.groups[groupName]
 	if !ok {
 		return
 	}
-	mailBoxAddress, ok = orgsMailBoxAddress[RegisterName]
+	mailBoxAddress, ok = orgsMailBoxAddress[orgName]
 	return
 }
 
@@ -122,7 +121,7 @@ type dynamicOrgInfo struct {
 }
 
 // 加入动态组织 overtime == -1 永不超时
-func (this *dynamicPact) Join(groupName, registerName string, provision provision, mailLen int, overtime int64) {
+func (this *dynamicPact) Join(groupName, orgName string, provision provision, mailLen int, overtime int64) {
 
 	group, ok := this.groups[groupName]
 	if !ok {
@@ -130,31 +129,31 @@ func (this *dynamicPact) Join(groupName, registerName string, provision provisio
 		goto NEW_ORG
 	}
 
-	_, ok = group[registerName]
+	_, ok = group[orgName]
 	if ok {
-		panic("已经存在叫做" + registerName + "的动态组织")
+		panic("已经存在叫做" + orgName + "的动态组织")
 	}
 
 NEW_ORG:
-	group[registerName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(provision)).Type(), mailLen, overtime}
+	group[orgName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(provision)).Type(), mailLen, overtime}
 	this.groups[groupName] = group
 }
 
 // 生成已经加入的动态组织
-func (this *dynamicPact) New(groupName, registerName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
 	group, ok := this.groups[groupName]
 	if !ok {
 		return
 	}
 
-	dynamicOrgInfo, ok := group[registerName]
+	dynamicOrgInfo, ok := group[orgName]
 	if !ok {
 		return
 	}
 	overtime := dynamicOrgInfo.overtime
 	orgReflect := reflect.New(dynamicOrgInfo.orgType)
 	org := orgReflect.Interface().(provision)
-	newMailBoxAddress := org.init(registerName, dynamicOrgInfo.mailLen, &overtime)
+	newMailBoxAddress := org.init(groupName, orgName, dynamicOrgInfo.mailLen, &overtime)
 	if overtime == -1 {
 		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	} else {
@@ -212,11 +211,10 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 			case mail, ok := <-newMailBoxAddress.address:
 				if !ok {
 					org.Terminate()
-					T_T.goodByeMyFriends()
 					return
 				}
 
-				method, ok := planningMethodsMap[mail.recipientName]
+				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue
 				}
@@ -265,10 +263,9 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 			case mail, ok := <-newMailBoxAddress.address:
 				if !ok {
 					org.Terminate()
-					T_T.goodByeMyFriends()
 					return
 				}
-				method, ok := planningMethodsMap[mail.recipientName]
+				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue
 				}
