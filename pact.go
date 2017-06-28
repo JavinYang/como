@@ -2,6 +2,7 @@ package como
 
 import (
 	"reflect"
+	"strconv"
 	"time"
 )
 
@@ -101,7 +102,7 @@ func (this *staticPact) GetGroupInfo(groupName string) (GroupsInfo string) {
 
 // 获取所有静态组信息
 func (this *staticPact) GetAllGroupInfo() (GroupsInfo string) {
-	GroupsInfo += "\n----------STATIC_PATH----------\n"
+	GroupsInfo += "\n----------STATIC_PACT----------\n"
 	for groupName, _ := range this.groups {
 		GroupsInfo += this.GetGroupInfo(groupName) + "\n"
 	}
@@ -170,15 +171,15 @@ func (this *dynamicPact) GetGroupInfo(groupName string) (GroupsInfo string) {
 		return
 	}
 	GroupsInfo = groupName
-	for name, _ := range group {
-		GroupsInfo += "\n" + "    " + name
+	for name, info := range group {
+		GroupsInfo += "\n" + "    " + name + "    " + strconv.FormatInt(info.overtime, 10)
 	}
 	return
 }
 
 // 获取所有静态组信息
 func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
-	GroupsInfo += "\n----------Dynamic_Pact----------\n"
+	GroupsInfo += "\n----------DYNAMIC_PACT----------\n"
 	for groupName, _ := range this.groups {
 		GroupsInfo += this.GetGroupInfo(groupName) + "\n"
 	}
