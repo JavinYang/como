@@ -23,12 +23,12 @@ type pacts struct {
 
 // 创建一个新动态组织带超时控制 overtime == -1 时永不超时
 func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
-	newMailBoxAddress := org.init("", "", mailLen, &overtime)
+	newMailBoxAddress := org.init("", "", mailLen, overtime)
 	orgReflect := reflect.ValueOf(org)
 	if overtime == -1 {
 		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	} else {
-		runWithTimeout(newMailBoxAddress, orgReflect, org, overtime, initPars...)
+		runWithTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	}
 
 	return newMailBoxAddress, true
@@ -36,7 +36,7 @@ func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...i
 
 // 组织规定规范
 type provision interface {
-	init(pactGroupName, pactRegisterName string, mailLen int, overTime *int64) (newMailBoxAddress MailBoxAddress)
+	init(pactGroupName, pactRegisterName string, mailLen int, overTime int64) (newMailBoxAddress MailBoxAddress)
 	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
@@ -68,7 +68,7 @@ func (this *staticPact) Join(groupName, orgName string, org provision, mailLen i
 
 NEW_ORG:
 	var overtime int64 = -1
-	newMailBoxAddress := org.init(groupName, orgName, mailLen, &overtime)
+	newMailBoxAddress := org.init(groupName, orgName, mailLen, overtime)
 	group[orgName] = newMailBoxAddress
 	this.groups[groupName] = group
 	orgReflect := reflect.ValueOf(org)
@@ -153,11 +153,11 @@ func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{})
 	overtime := dynamicOrgInfo.overtime
 	orgReflect := reflect.New(dynamicOrgInfo.orgType)
 	org := orgReflect.Interface().(provision)
-	newMailBoxAddress := org.init(groupName, orgName, dynamicOrgInfo.mailLen, &overtime)
+	newMailBoxAddress := org.init(groupName, orgName, dynamicOrgInfo.mailLen, overtime)
 	if overtime == -1 {
 		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	} else {
-		runWithTimeout(newMailBoxAddress, orgReflect, org, overtime, initPars...)
+		runWithTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	}
 
 	return newMailBoxAddress, true
@@ -185,60 +185,7 @@ func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
 	return
 }
 
-// 运行动态组织
-func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, overtime int64, initPars ...interface{}) {
-
-	planningMethodsMap := make(map[string]func())
-	numMethod := orgReflect.NumMethod()
-	for i := 0; i < numMethod; i++ {
-		methodName := orgReflect.Type().Method(i).Name
-		switch methodName {
-		case "Init":
-		case "RoutineStart":
-		case "RoutineEnd":
-		case "Terminate":
-		default:
-			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
-		}
-	}
-
-	T_T := org.getLeader()
-
-	go func() {
-		org.Init(initPars...)
-		for {
-			select {
-			case mail, ok := <-newMailBoxAddress.address:
-				if !ok {
-					org.Terminate()
-					return
-				}
-
-				method, ok := planningMethodsMap[mail.recipientServerName]
-				if !ok {
-					continue
-				}
-				org.deliverMailForMailBox(mail)
-				org.routineStart()
-				org.RoutineStart()
-				if !T_T.isAccept() {
-					continue
-				}
-				method()
-				org.RoutineEnd()
-			case function, _ := <-T_T.updateNotify:
-				function()
-			case <-time.After(time.Second):
-				if overtime == 0 {
-					T_T.Dissolve()
-				}
-				overtime -= 1
-			}
-		}
-	}()
-}
-
-// 运行静态组织
+// 运行无超时
 func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
 
 	planningMethodsMap := make(map[string]func())
@@ -265,6 +212,73 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 					org.Terminate()
 					return
 				}
+				method, ok := planningMethodsMap[mail.recipientServerName]
+				if !ok {
+					continue
+				}
+				org.deliverMailForMailBox(mail)
+				org.routineStart()
+				org.RoutineStart()
+				if !T_T.isAccept() {
+					continue
+				}
+				method()
+				org.RoutineEnd()
+			case function, _ := <-T_T.updateNotify:
+				function()
+			}
+		}
+	}()
+}
+
+// 运行有超时
+func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
+
+	planningMethodsMap := make(map[string]func())
+	numMethod := orgReflect.NumMethod()
+	for i := 0; i < numMethod; i++ {
+		methodName := orgReflect.Type().Method(i).Name
+		switch methodName {
+		case "Init":
+		case "RoutineStart":
+		case "RoutineEnd":
+		case "Terminate":
+		default:
+			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
+		}
+	}
+
+	T_T := org.getLeader()
+
+	updateEndTime := T_T.getUpdateEndTimeChan()
+
+	go func() {
+		endTime := T_T.GetEndTime()
+		ok := false
+		for {
+			select {
+			case endTime, ok = <-updateEndTime:
+				if !ok {
+					return
+				}
+			case <-time.After(time.Duration((endTime - time.Now().Unix()) * 1e9)):
+				T_T.Dissolve()
+				return
+			}
+		}
+	}()
+
+	go func() {
+		org.Init(initPars...)
+		for {
+			select {
+			case mail, ok := <-newMailBoxAddress.address:
+				if !ok {
+					close(updateEndTime)
+					org.Terminate()
+					return
+				}
+
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue

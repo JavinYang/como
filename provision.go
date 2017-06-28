@@ -8,15 +8,18 @@ import (
 
 // 组织规划
 type Provision struct {
-	T_T       leader  // 领导
-	MailBox   mailBox // 邮箱
-	groupName string  // 组织 组名称
-	orgName   string  // 公约注册名称
-	overtime  *int64  // 超时时间
+	T_T           leader     // 领导
+	MailBox       mailBox    // 邮箱
+	groupName     string     // 组织 组名称
+	orgName       string     // 公约注册名称
+	startTime     int64      // 开始时间
+	endTime       int64      // 结束时间
+	updateEndTime chan int64 // 更新结束时间的通道
+
 }
 
 // 初始化(框架内部使用)
-func (this *Provision) init(groupName, orgName string, mailLen int, overtime *int64) (newMailBoxAddress MailBoxAddress) {
+func (this *Provision) init(groupName, orgName string, mailLen int, overtime int64) (newMailBoxAddress MailBoxAddress) {
 	this.groupName = groupName
 	this.orgName = orgName
 	this.MailBox.Address.address = make(chan mail, mailLen)
@@ -25,9 +28,11 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime *in
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
 	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]bool)
-	this.overtime = overtime
 	this.T_T.runningUpdates = make(map[Uid]*struct{})
 	this.T_T.updateNotify = make(chan func(), 0)
+	this.startTime = time.Now().Unix()
+	this.endTime = this.startTime + overtime
+	this.updateEndTime = make(chan int64, 0)
 	return this.MailBox.Address
 }
 
@@ -131,17 +136,33 @@ func (this *leader) GetPactRegisterName() string {
 // 获取超时时间
 func (this *leader) GetOvertime() int64 {
 	org := (*Provision)(unsafe.Pointer(this))
-	return *org.overtime
+	return org.endTime - time.Now().Unix()
 }
 
 // 设置超时时间
 func (this *leader) SetOvertime(newOvertime int64) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if newOvertime < 0 {
-		newOvertime = -1
-	}
-	*org.overtime = newOvertime
+	org.endTime = time.Now().Unix() + newOvertime
+	org.updateEndTime <- org.endTime
+}
 
+// 获取开始时间
+func (this *leader) GetStartTime() int64 {
+	org := (*Provision)(unsafe.Pointer(this))
+	return org.startTime
+}
+
+// 获取结束时间
+func (this *leader) GetEndTime() int64 {
+	org := (*Provision)(unsafe.Pointer(this))
+	return org.endTime
+}
+
+// 设置结束时间
+func (this *leader) SetEndTime(newEndTime int64) {
+	org := (*Provision)(unsafe.Pointer(this))
+	org.endTime = newEndTime
+	org.updateEndTime <- org.endTime
 }
 
 // 解散组织
@@ -149,6 +170,11 @@ func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(this))
 	org.MailBox.Address.shut()
 	org.T_T.CleanUpdates()
+}
+
+func (this *leader) getUpdateEndTimeChan() chan int64 {
+	org := (*Provision)(unsafe.Pointer(this))
+	return org.updateEndTime
 }
 
 // 子循环标识符
