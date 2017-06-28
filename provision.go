@@ -262,6 +262,7 @@ func (this *addressMap) RemoveFriends(friendsName string) {
 	delete(this.addressMap, friendsName)
 }
 
+// 删除用户
 func (this *addressMap) RemoveFriend(mailBoxAddress MailBoxAddress) {
 	for friendsName, mailBoxsAddress := range this.addressMap {
 		_, ok := mailBoxsAddress[mailBoxAddress]
