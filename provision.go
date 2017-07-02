@@ -189,6 +189,7 @@ type updateInfo struct {
 	function        func()
 }
 
+// 运行循环
 func (this *updateInfo) run() {
 	if this.isColse == true {
 		return
@@ -196,6 +197,7 @@ func (this *updateInfo) run() {
 	this.function()
 }
 
+// 关闭循环
 func (this *updateInfo) close() {
 	if this.isColse == true {
 		return
