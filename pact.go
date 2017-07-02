@@ -189,22 +189,23 @@ func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
 // 运行无超时
 func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
 
-	planningMethodsMap := make(map[string]func())
-	numMethod := orgReflect.NumMethod()
-	for i := 0; i < numMethod; i++ {
-		methodName := orgReflect.Type().Method(i).Name
-		switch methodName {
-		case "Init":
-		case "RoutineStart":
-		case "RoutineEnd":
-		case "Terminate":
-		default:
-			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
-		}
-	}
-
-	T_T := org.getLeader()
 	go func() {
+		planningMethodsMap := make(map[string]func())
+		numMethod := orgReflect.NumMethod()
+		for i := 0; i < numMethod; i++ {
+			methodName := orgReflect.Type().Method(i).Name
+			switch methodName {
+			case "Init":
+			case "RoutineStart":
+			case "RoutineEnd":
+			case "Terminate":
+			default:
+				planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
+			}
+		}
+
+		T_T := org.getLeader()
+
 		org.Init(initPars...)
 		for {
 			select {
@@ -225,8 +226,8 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 				}
 				method()
 				org.RoutineEnd()
-			case function, _ := <-T_T.updateNotify:
-				function()
+			case updateInfo, _ := <-T_T.updateNotify:
+				updateInfo.run()
 			}
 		}
 	}()
@@ -234,20 +235,6 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 
 // 运行有超时
 func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
-
-	planningMethodsMap := make(map[string]func())
-	numMethod := orgReflect.NumMethod()
-	for i := 0; i < numMethod; i++ {
-		methodName := orgReflect.Type().Method(i).Name
-		switch methodName {
-		case "Init":
-		case "RoutineStart":
-		case "RoutineEnd":
-		case "Terminate":
-		default:
-			planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
-		}
-	}
 
 	T_T := org.getLeader()
 
@@ -270,6 +257,21 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 	}()
 
 	go func() {
+
+		planningMethodsMap := make(map[string]func())
+		numMethod := orgReflect.NumMethod()
+		for i := 0; i < numMethod; i++ {
+			methodName := orgReflect.Type().Method(i).Name
+			switch methodName {
+			case "Init":
+			case "RoutineStart":
+			case "RoutineEnd":
+			case "Terminate":
+			default:
+				planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
+			}
+		}
+
 		org.Init(initPars...)
 		for {
 			select {
@@ -292,8 +294,8 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 				}
 				method()
 				org.RoutineEnd()
-			case function, _ := <-T_T.updateNotify:
-				function()
+			case updateInfo, _ := <-T_T.updateNotify:
+				updateInfo.run()
 			}
 		}
 	}()

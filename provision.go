@@ -28,8 +28,8 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
 	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]bool)
-	this.T_T.runningUpdates = make(map[Uid]*struct{})
-	this.T_T.updateNotify = make(chan func(), 0)
+	this.T_T.runningUpdates = make(map[Uid]bool)
+	this.T_T.updateNotify = make(chan *updateInfo, 0)
 	this.startTime = time.Now().Unix()
 	this.endTime = this.startTime + overtime
 	this.updateEndTime = make(chan int64, 0)
@@ -65,9 +65,9 @@ func (this *Provision) Terminate() {}
 
 // 组织领导
 type leader struct {
-	currentAcceptState bool              // 是否接受受理了当前请求
-	updateNotify       chan func()       // 通知组织运行循环的通道
-	runningUpdates     map[Uid]*struct{} // 当前运行的附属循环
+	currentAcceptState bool             // 是否接受受理了当前请求
+	updateNotify       chan *updateInfo // 通知组织运行循环的通道
+	runningUpdates     map[Uid]bool     // 当前运行的附属循环
 }
 
 // 是否同意本次请求
@@ -78,8 +78,10 @@ func (this *leader) isAccept() bool {
 // 添加事物循环处理
 func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid) {
 	updateColseChan := make(chan struct{}, 0)
-	uid = Uid{updateColseChan}
-	this.runningUpdates[uid] = nil
+	updateInfo := &updateInfo{updateColseChan: updateColseChan, isColse: false, function: function}
+	uid = Uid(updateInfo)
+	this.runningUpdates[uid] = false
+	function()
 	go func() {
 		for {
 			select {
@@ -89,7 +91,7 @@ func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid)
 				select {
 				case <-updateColseChan:
 					return
-				case this.updateNotify <- function:
+				case this.updateNotify <- updateInfo:
 				}
 			}
 		}
@@ -103,16 +105,16 @@ func (this *leader) RemoveUpdate(uid Uid) {
 	if !ok {
 		return
 	}
+	(*uid).close()
 	delete(this.runningUpdates, uid)
-	close(uid.updateColseChan)
 	return
 }
 
 // 清理所有子循环
 func (this *leader) CleanUpdates() {
-	for updateId, _ := range this.runningUpdates {
-		delete(this.runningUpdates, updateId)
-		close(updateId.updateColseChan)
+	for uid, _ := range this.runningUpdates {
+		(*uid).close()
+		delete(this.runningUpdates, uid)
 	}
 }
 
@@ -178,8 +180,28 @@ func (this *leader) getUpdateEndTimeChan() chan int64 {
 }
 
 // 子循环标识符
-type Uid struct {
+type Uid *updateInfo
+
+// 循环详情
+type updateInfo struct {
 	updateColseChan chan struct{}
+	isColse         bool
+	function        func()
+}
+
+func (this *updateInfo) run() {
+	if this.isColse == true {
+		return
+	}
+	this.function()
+}
+
+func (this *updateInfo) close() {
+	if this.isColse == true {
+		return
+	}
+	this.isColse = false
+	close(this.updateColseChan)
 }
 
 // 邮箱
@@ -188,7 +210,6 @@ type mailBox struct {
 	mail       mail           // 邮件
 	Address    MailBoxAddress // 邮箱地址
 	org        *Provision     // 当前邮箱的组织
-
 }
 
 // 写邮件
@@ -374,9 +395,9 @@ type mail struct {
 	senderGroupName     string                 // 发送人组名
 	senderOrgName       string                 // 发送人组织名
 	senderServerName    string                 // 发件人服务名字
+	recipientAddress    MailBoxAddress         // 收件人地址
 	recipientGroupName  string                 // 收件人组名
 	recipientOrgName    string                 // 收件人组织名
-	recipientAddress    MailBoxAddress         // 收件人地址
 	recipientServerName string                 // 收件人服务名字
 	contents            []interface{}          // 邮件内容
 	remarks             map[string]interface{} // 邮件备注
@@ -397,9 +418,14 @@ func (this *mail) GetSenderOrgName() string {
 	return this.senderOrgName
 }
 
-// 获取发件人名字
+// 获取发件人服务名
 func (this *mail) GetSenderServerName() string {
 	return this.senderServerName
+}
+
+// 获取收件人服务名
+func (this *mail) GetRecipientServerName() string {
+	return this.recipientServerName
 }
 
 // 获取邮件内容
@@ -422,12 +448,13 @@ func (this *mail) GetRemarks() map[string]interface{} {
 }
 
 // 回复
-func (this mail) Reply(recipientServerName string) draft {
-	draft := draft(this)                               // 创建新草稿
-	senderAddress := draft.senderAddress               // 临时储存发送者
-	draft.senderAddress = draft.recipientAddress       // 接收地址变成发送地址
-	draft.senderGroupName = draft.recipientGroupName   // 接受组名变发送组名
-	draft.senderOrgName = draft.recipientOrgName       // 接受组织名变发送组织名
+func (this mail) Reply() draft {
+	draft := draft(this)                             // 创建新草稿
+	senderAddress := draft.senderAddress             // 临时储存发送者
+	draft.senderAddress = draft.recipientAddress     // 接收地址变成发送地址
+	draft.senderGroupName = draft.recipientGroupName // 接受组名变发送组名
+	draft.senderOrgName = draft.recipientOrgName     // 接受组织名变发送组织名
+	recipientServerName := draft.senderServerName
 	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
 	draft.recipientAddress = senderAddress             // 发送地址变成接收地址
 	draft.recipientServerName = recipientServerName    // 设置接收人
@@ -459,6 +486,11 @@ func (this *draft) SetRecipientAddress(mailBoxAddress MailBoxAddress) {
 // 设置收件人名字
 func (this *draft) SetRecipientServerName(name string) {
 	this.recipientServerName = name
+}
+
+// 设置发件人名字
+func (this *draft) SetSendServerName(name string) {
+	this.senderServerName = name
 }
 
 // 设置草稿内容
