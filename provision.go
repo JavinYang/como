@@ -27,8 +27,8 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	this.MailBox.org = this
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
-	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]bool)
-	this.T_T.runningUpdates = make(map[Uid]bool)
+	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]struct{})
+	this.T_T.runningUpdates = make(map[Uid]struct{})
 	this.T_T.updateNotify = make(chan *updateInfo, 0)
 	this.startTime = time.Now().Unix()
 	this.endTime = this.startTime + overtime
@@ -67,7 +67,7 @@ func (this *Provision) Terminate() {}
 type leader struct {
 	currentAcceptState bool             // 是否接受受理了当前请求
 	updateNotify       chan *updateInfo // 通知组织运行循环的通道
-	runningUpdates     map[Uid]bool     // 当前运行的附属循环
+	runningUpdates     map[Uid]struct{} // 当前运行的附属循环
 }
 
 // 是否同意本次请求
@@ -80,7 +80,7 @@ func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid)
 	updateColseChan := make(chan struct{}, 0)
 	updateInfo := &updateInfo{updateColseChan: updateColseChan, isColse: false, function: function}
 	uid = Uid(updateInfo)
-	this.runningUpdates[uid] = false
+	this.runningUpdates[uid] = struct{}{}
 	function()
 	go func() {
 		for {
@@ -264,16 +264,16 @@ func (this *MailBoxAddress) IsShut() bool {
 
 // 通讯录
 type addressMap struct {
-	addressMap map[string]map[MailBoxAddress]bool
+	addressMap map[string]map[MailBoxAddress]struct{}
 }
 
 // 添加好友
 func (this *addressMap) AddFriend(friendName string, mailBoxAddress MailBoxAddress) {
 	_, ok := this.addressMap[friendName]
 	if !ok {
-		this.addressMap[friendName] = make(map[MailBoxAddress]bool)
+		this.addressMap[friendName] = make(map[MailBoxAddress]struct{})
 	}
-	this.addressMap[friendName][mailBoxAddress] = true
+	this.addressMap[friendName][mailBoxAddress] = struct{}{}
 }
 
 // 用名字删除用户
@@ -319,7 +319,7 @@ func (this *addressMap) RemoveFriendByName(friendName string, mailBoxAddress Mai
 
 // 删除所有好友
 func (this *addressMap) RemoveAllFriends() {
-	this.addressMap = make(map[string]map[MailBoxAddress]bool)
+	this.addressMap = make(map[string]map[MailBoxAddress]struct{})
 }
 
 // 获取好友

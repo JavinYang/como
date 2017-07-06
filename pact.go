@@ -257,7 +257,6 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 	}()
 
 	go func() {
-
 		planningMethodsMap := make(map[string]func())
 		numMethod := orgReflect.NumMethod()
 		for i := 0; i < numMethod; i++ {
