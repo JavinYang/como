@@ -23,7 +23,7 @@ type pacts struct {
 }
 
 // 创建一个新动态组织带超时控制 overtime == -1 时永不超时
-func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress) {
 	newMailBoxAddress := org.init("", "", mailLen, overtime)
 	orgReflect := reflect.ValueOf(org)
 	if overtime == -1 {
@@ -32,13 +32,13 @@ func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...i
 		runWithTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 	}
 
-	return newMailBoxAddress, true
+	return newMailBoxAddress
 }
 
 // 组织规定规范
 type provision interface {
 	init(pactGroupName, pactRegisterName string, mailLen int, overTime int64) (newMailBoxAddress MailBoxAddress)
-	deliverMailForMailBox(newMail mail)
+	deliverMailForMailBox(newMail Mail)
 	getLeader() *leader
 	Init(...interface{})
 	routineStart()

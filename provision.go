@@ -22,7 +22,7 @@ type Provision struct {
 func (this *Provision) init(groupName, orgName string, mailLen int, overtime int64) (newMailBoxAddress MailBoxAddress) {
 	this.groupName = groupName
 	this.orgName = orgName
-	this.MailBox.Address.address = make(chan mail, mailLen)
+	this.MailBox.Address.address = make(chan Mail, mailLen)
 	this.MailBox.Address.mutex = &sync.Mutex{}
 	this.MailBox.org = this
 	isShut := false
@@ -37,7 +37,7 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 }
 
 // 投递邮件到邮箱(框架内部使用)
-func (this *Provision) deliverMailForMailBox(newMail mail) {
+func (this *Provision) deliverMailForMailBox(newMail Mail) {
 	this.MailBox.mail = newMail
 }
 
@@ -75,13 +75,18 @@ func (this *leader) isAccept() bool {
 	return this.currentAcceptState
 }
 
+// 添加事物循环处理并立刻运行一次function
+func (this *leader) AddUpdateImmediateRun(function func(), timestep time.Duration) (uid Uid) {
+	function()
+	return this.AddUpdate(function, timestep)
+}
+
 // 添加事物循环处理
 func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid) {
 	updateColseChan := make(chan struct{}, 0)
 	updateInfo := &updateInfo{updateColseChan: updateColseChan, isColse: false, function: function}
 	uid = Uid(updateInfo)
 	this.runningUpdates[uid] = struct{}{}
-	function()
 	go func() {
 		for {
 			select {
@@ -209,28 +214,31 @@ func (this *updateInfo) close() {
 // 邮箱
 type mailBox struct {
 	AddressMap addressMap     // 通讯录
-	mail       mail           // 邮件
+	mail       Mail           // 邮件
 	Address    MailBoxAddress // 邮箱地址
 	org        *Provision     // 当前邮箱的组织
 }
 
 // 写邮件
-func (this *mailBox) Write() draft {
-	return draft{senderAddress: this.Address, senderGroupName: this.org.groupName, senderOrgName: this.org.orgName, senderServerName: this.mail.recipientServerName}
+func (this *mailBox) Write() Draft {
+	return Draft{senderAddress: this.Address,
+		senderGroupName:  this.org.groupName,
+		senderOrgName:    this.org.orgName,
+		senderServerName: this.mail.recipientServerName}
 }
 
 // 读邮件
-func (this *mailBox) Read() mail {
+func (this *mailBox) Read() *Mail {
 	this.mail.recipientGroupName = this.org.groupName
 	this.mail.recipientOrgName = this.org.orgName
-	return this.mail
+	return &this.mail
 }
 
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type MailBoxAddress struct {
 	mutex   *sync.Mutex
 	isShut  *bool     // 是否邮箱地址已经被关闭
-	address chan mail // 邮箱地址
+	address chan Mail // 邮箱地址
 }
 
 // 关闭邮箱
@@ -245,7 +253,7 @@ func (this *MailBoxAddress) shut() {
 }
 
 // 把数据放入邮箱
-func (this *MailBoxAddress) send(mail mail) bool {
+func (this *MailBoxAddress) send(mail Mail) bool {
 	this.mutex.Lock()         // 加锁
 	defer this.mutex.Unlock() // 函数结束自动解锁
 	if *this.isShut == true { // 如果当前地址已经关闭返回发送失败
@@ -367,12 +375,12 @@ func (this *addressMap) SendForFriends(friendsName string, recipientServerName s
 		return
 	}
 	mailBox := (*mailBox)(unsafe.Pointer(this))
-	draft := mailBox.Write()
-	draft.recipientServerName = recipientServerName
-	draft.remarks = remarks
+	Draft := mailBox.Write()
+	Draft.recipientServerName = recipientServerName
+	Draft.remarks = remarks
 	for mailBoxAddress, _ := range mailBoxsAddress {
-		draft.recipientAddress = mailBoxAddress
-		draft.Send()
+		Draft.recipientAddress = mailBoxAddress
+		Draft.Send()
 	}
 
 }
@@ -380,19 +388,19 @@ func (this *addressMap) SendForFriends(friendsName string, recipientServerName s
 // 发送数据给所有好友
 func (this *addressMap) SendForAllFriends(recipientServerName string, remarks map[string]interface{}, contents ...interface{}) {
 	mailBox := (*mailBox)(unsafe.Pointer(this))
-	draft := mailBox.Write()
-	draft.recipientServerName = recipientServerName
-	draft.remarks = remarks
+	Draft := mailBox.Write()
+	Draft.recipientServerName = recipientServerName
+	Draft.remarks = remarks
 	for _, mailBoxsAddress := range this.addressMap {
 		for mailBoxAddress, _ := range mailBoxsAddress {
-			draft.recipientAddress = mailBoxAddress
-			draft.Send()
+			Draft.recipientAddress = mailBoxAddress
+			Draft.Send()
 		}
 	}
 }
 
 // 邮件
-type mail struct {
+type Mail struct {
 	senderAddress       MailBoxAddress         // 发件人地址
 	senderGroupName     string                 // 发送人组名
 	senderOrgName       string                 // 发送人组织名
@@ -406,37 +414,37 @@ type mail struct {
 }
 
 // 获取发件人地址
-func (this *mail) GetSenderAddress() MailBoxAddress {
+func (this *Mail) SenderAddress() MailBoxAddress {
 	return this.senderAddress
 }
 
 // 获取发件人组名
-func (this *mail) GetSenderGroupName() string {
+func (this *Mail) SenderGroupName() string {
 	return this.senderGroupName
 }
 
 // 获取发件人组织名
-func (this *mail) GetSenderOrgName() string {
+func (this *Mail) SenderOrgName() string {
 	return this.senderOrgName
 }
 
 // 获取发件人服务名
-func (this *mail) GetSenderServerName() string {
+func (this *Mail) SenderServerName() string {
 	return this.senderServerName
 }
 
 // 获取收件人服务名
-func (this *mail) GetRecipientServerName() string {
+func (this *Mail) RecipientServerName() string {
 	return this.recipientServerName
 }
 
 // 获取邮件内容
-func (this *mail) GetContent() []interface{} {
+func (this *Mail) Content() []interface{} {
 	return this.contents
 }
 
 // 获取一个邮件注释
-func (this *mail) GetRemark(key string) (val interface{}, ok bool) {
+func (this *Mail) Remark(key string) (val interface{}, ok bool) {
 	if this.remarks != nil {
 		val, ok = this.remarks[key]
 		return
@@ -445,68 +453,68 @@ func (this *mail) GetRemark(key string) (val interface{}, ok bool) {
 }
 
 // 获取邮件注释
-func (this *mail) GetRemarks() map[string]interface{} {
+func (this *Mail) Remarks() map[string]interface{} {
 	return this.remarks
 }
 
 // 回复
-func (this mail) Reply() draft {
-	draft := draft(this)                             // 创建新草稿
-	senderAddress := draft.senderAddress             // 临时储存发送者
-	draft.senderAddress = draft.recipientAddress     // 接收地址变成发送地址
-	draft.senderGroupName = draft.recipientGroupName // 接受组名变发送组名
-	draft.senderOrgName = draft.recipientOrgName     // 接受组织名变发送组织名
-	recipientServerName := draft.senderServerName
-	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
-	draft.recipientAddress = senderAddress             // 发送地址变成接收地址
-	draft.recipientServerName = recipientServerName    // 设置接收人
-	draft.contents = nil                               // 内容待设置
-	draft.remarks = nil                                // 注释待设置
-	return draft                                       // 返回这个草稿
+func (this Mail) Reply() Draft {
+	Draft := Draft(this)                             // 创建新草稿
+	senderAddress := Draft.senderAddress             // 临时储存发送者
+	Draft.senderAddress = Draft.recipientAddress     // 接收地址变成发送地址
+	Draft.senderGroupName = Draft.recipientGroupName // 接受组名变发送组名
+	Draft.senderOrgName = Draft.recipientOrgName     // 接受组织名变发送组织名
+	recipientServerName := Draft.senderServerName
+	Draft.senderServerName = Draft.recipientServerName // 接收人变成发送人
+	Draft.recipientAddress = senderAddress             // 发送地址变成接收地址
+	Draft.recipientServerName = recipientServerName    // 设置接收人
+	Draft.contents = nil                               // 内容待设置
+	Draft.remarks = nil                                // 注释待设置
+	return Draft                                       // 返回这个草稿
 }
 
 // 转发
-func (this mail) Forward(recipientAddress MailBoxAddress, recipientServerName string) draft {
-	draft := draft(this)                               // 创建新草稿
-	draft.senderAddress = draft.recipientAddress       // 接收地址变成发送地址
-	draft.senderGroupName = draft.recipientGroupName   // 接受组名变发送组名
-	draft.senderOrgName = draft.recipientOrgName       // 接受组织名变发送组织名
-	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
-	draft.recipientAddress = recipientAddress          // 设置接收地址
-	draft.recipientServerName = recipientServerName    // 设置接收人
-	return draft                                       // 返回这个草稿
+func (this Mail) Forward(recipientAddress MailBoxAddress, recipientServerName string) Draft {
+	Draft := Draft(this)                               // 创建新草稿
+	Draft.senderAddress = Draft.recipientAddress       // 接收地址变成发送地址
+	Draft.senderGroupName = Draft.recipientGroupName   // 接受组名变发送组名
+	Draft.senderOrgName = Draft.recipientOrgName       // 接受组织名变发送组织名
+	Draft.senderServerName = Draft.recipientServerName // 接收人变成发送人
+	Draft.recipientAddress = recipientAddress          // 设置接收地址
+	Draft.recipientServerName = recipientServerName    // 设置接收人
+	return Draft                                       // 返回这个草稿
 }
 
 // 草稿
-type draft mail
+type Draft Mail
 
 // 设置收件人地址
-func (this *draft) SetRecipientAddress(mailBoxAddress MailBoxAddress) {
+func (this *Draft) RecipientAddress(mailBoxAddress MailBoxAddress) {
 	this.recipientAddress = mailBoxAddress
 }
 
 // 设置收件人名字
-func (this *draft) SetRecipientServerName(name string) {
+func (this *Draft) RecipientServerName(name string) {
 	this.recipientServerName = name
 }
 
 // 设置发件人名字
-func (this *draft) SetSendServerName(name string) {
+func (this *Draft) SendServerName(name string) {
 	this.senderServerName = name
 }
 
 // 设置草稿内容
-func (this *draft) SetContent(contents ...interface{}) {
+func (this *Draft) Content(contents ...interface{}) {
 	this.contents = contents
 }
 
 // 设置草稿备注
-func (this *draft) SetRemarks(remarks map[string]interface{}) {
+func (this *Draft) Remarks(remarks map[string]interface{}) {
 	this.remarks = remarks
 }
 
 // 添加草稿备注
-func (this *draft) AddRemark(key string, val interface{}) {
+func (this *Draft) AddRemark(key string, val interface{}) {
 	if this.remarks == nil {
 		this.remarks = make(map[string]interface{})
 	}
@@ -514,11 +522,11 @@ func (this *draft) AddRemark(key string, val interface{}) {
 }
 
 // 发送草稿(如果发送的地址或者接收人不存在返回false)
-func (this draft) Send() (ok bool) {
+func (this Draft) Send() (ok bool) {
 
 	if this.recipientAddress.address == nil {
 		return false
 	}
 
-	return this.recipientAddress.send(mail(this))
+	return this.recipientAddress.send(Mail(this))
 }
