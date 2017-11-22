@@ -44,6 +44,7 @@ type provision interface {
 	routineStart()
 	RoutineStart()
 	RoutineEnd()
+	Testament()
 	Terminate()
 }
 
@@ -214,6 +215,16 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 					org.Terminate()
 					return
 				}
+				if mail.isSystem {
+					if mail.recipientGroupName == "Testament" {
+						org.deliverMailForMailBox(mail)
+						org.Testament()
+						continue
+					} else if mail.recipientServerName == "dissolve" {
+						T_T.Dissolve()
+						return
+					}
+				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue
@@ -280,7 +291,16 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 					org.Terminate()
 					return
 				}
-
+				if mail.isSystem {
+					if mail.recipientGroupName == "Testament" {
+						org.deliverMailForMailBox(mail)
+						org.Testament()
+						continue
+					} else if mail.recipientServerName == "dissolve" {
+						T_T.Dissolve()
+						return
+					}
+				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue
