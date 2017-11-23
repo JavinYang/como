@@ -21,10 +21,10 @@ type Provision struct {
 func (this *Provision) init(groupName, orgName string, mailLen int, overtime int64) (newMailBoxAddress MailBoxAddress) {
 	this.groupName = groupName
 	this.orgName = orgName
-	this.MailBox.Address.mailBox = &this.MailBox
-	this.MailBox.Address.address = make(chan Mail, mailLen)
-	this.MailBox.Address.mutex = &sync.RWMutex{}
 	this.MailBox.org = this
+	this.MailBox.Address.mailBox = &this.MailBox
+	this.MailBox.Address.address = make(chan mail, mailLen)
+	this.MailBox.Address.mutex = &sync.RWMutex{}
 	isShut := false
 	this.MailBox.Address.isShut = &isShut
 	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]struct{})
@@ -40,7 +40,7 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 }
 
 // 投递邮件到邮箱(框架内部使用)
-func (this *Provision) deliverMailForMailBox(newMail Mail) {
+func (this *Provision) deliverMailForMailBox(newMail mail) {
 	this.MailBox.mail = newMail
 }
 
@@ -181,107 +181,206 @@ func (this *leader) SetEndTime(newEndTime int64) {
 // 建立连接(共生死)
 func (this *leader) LinkDD(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
 	if *mailBoxAddress.isShut { // 如果对面已经死了那我也要死
+		mailBoxAddress.mutex.Unlock()
 		this.Dissolve()
 	} else {
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
+		// 我死你也死
 		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 你死我也死
+		org.MailBox.Address.mutex.Lock()
+		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
+}
+
+// 建立连接(我死告诉你，你死告诉我)
+func (this *leader) LinkTT(mailBoxAddress MailBoxAddress) {
+	org := (*Provision)(unsafe.Pointer(this))
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+		return
+	}
+	mailBoxAddress.mutex.Lock()
+	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
+		mailBoxAddress.mutex.Unlock()
+		this.sendTestamentForMe(org, mailBoxAddress)
+	} else {
+		// 你死告诉我
+		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 我死告诉你
+		org.MailBox.Address.mutex.Lock()
+		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
+	}
 }
 
 // 建立连接(我死你也死，你死告诉我)
 func (this *leader) LinkDT(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
 	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
-		this.sendTestament(mailBoxAddress)
+		mailBoxAddress.mutex.Unlock()
+		this.sendTestamentForMe(org, mailBoxAddress)
 	} else {
+		// 你死告诉我
+		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 我死你也死
+		org.MailBox.Address.mutex.Lock()
 		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
-		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
+
 }
 
 // 建立连接(我死告诉你，你死我也死)
 func (this *leader) LinkTD(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
 	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
+		mailBoxAddress.mutex.Unlock()
 		this.sendTestamentForMe(org, mailBoxAddress)
 	} else {
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
+		// 你死我也死
 		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 我死告诉你
+		org.MailBox.Address.mutex.Lock()
+		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
 }
 
 // 建立连接(我死你也死，你死无所谓)
 func (this *leader) LinkD_(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
+	// 如果你没死
 	if !*mailBoxAddress.isShut {
+		// 你死我所谓
+		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
+		if ok {
+			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
+		}
+		mailBoxAddress.mutex.Unlock()
+		// 我死你也死
+		org.MailBox.Address.mutex.Lock()
 		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
+
 }
 
 // 建立连接(我死无所谓，你死我也死)
 func (this *leader) Link_D(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	org.MailBox.Address.mutex.Unlock()
+	mailBoxAddress.mutex.Lock()
 	if *mailBoxAddress.isShut { // 如果对面已经死了我也死
+		mailBoxAddress.mutex.Unlock()
 		this.Dissolve()
 	} else {
+		// 你死我就死
 		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 我死无所谓
+		org.MailBox.Address.mutex.Lock()
+		_, ok := org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
+		if ok {
+			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
+		}
 	}
-	mailBoxAddress.mutex.RUnlock()
+
 }
 
 // 建立连接(我死告诉你，你死无所谓)
 func (this *leader) LinkT_(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
 	if !*mailBoxAddress.isShut {
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
+		// 你死无所谓
+		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
+		if ok {
+			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
+		}
+		mailBoxAddress.mutex.Unlock()
+		// 我死告诉你
+		org.MailBox.Address.mutex.Lock()
+		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
 }
 
 // 建立连接(我死无所谓，你死告诉我)
 func (this *leader) Link_T(mailBoxAddress MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address {
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.RLock()
+	mailBoxAddress.mutex.Lock()
 	if *mailBoxAddress.isShut { // 如果对面已经死了冒充对方发送遗嘱给自己
+		mailBoxAddress.mutex.Unlock()
 		this.sendTestamentForMe(org, mailBoxAddress)
 	} else {
-		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
+		// 你死告诉我
+		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
+		mailBoxAddress.mutex.Unlock()
+		// 我死无所谓
+		org.MailBox.Address.mutex.Lock()
+		_, ok := org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
+		if ok {
+			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
+		}
+		org.MailBox.Address.mutex.Unlock()
 	}
-	mailBoxAddress.mutex.RUnlock()
 }
 
+// 解除连接
+func (this *leader) Link__(mailBoxAddress MailBoxAddress) {
+	org := (*Provision)(unsafe.Pointer(this))
+	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+		return
+	}
+	mailBoxAddress.mutex.Lock()
+	if !*mailBoxAddress.isShut {
+		// 你死无所谓
+		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
+		if ok {
+			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
+		}
+		mailBoxAddress.mutex.Unlock()
+		// 我死无所谓
+		org.MailBox.Address.mutex.Lock()
+		_, ok = org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
+		if ok {
+			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
+		}
+		org.MailBox.Address.mutex.Unlock()
+	}
+}
+
+// 冒充对方发送遗嘱给自己
 func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAddress) {
 	draft := org.MailBox.Write()
 	draft.senderAddress = mailBoxAddress
@@ -291,39 +390,11 @@ func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAdd
 	draft.Send()
 }
 
-// 发送遗嘱
-func (this *leader) sendTestament(mailBoxAddress MailBoxAddress) {
-	org := (*Provision)(unsafe.Pointer(this))
-	draft := org.MailBox.Write()
-	draft.isSystem = true
-	draft.recipientAddress = mailBoxAddress
-	draft.recipientServerName = "Testament"
-	draft.Send()
-}
-
-// 发送解散
-func (this *leader) sendDissolve(mailBoxAddress MailBoxAddress) {
-	org := (*Provision)(unsafe.Pointer(this))
-	draft := org.MailBox.Write()
-	draft.isSystem = true
-	draft.recipientAddress = mailBoxAddress
-	draft.recipientServerName = "dissolve"
-	draft.Send()
-}
-
 // 解散组织
 func (this *leader) Dissolve() {
 	org := (*Provision)(unsafe.Pointer(this))
-	org.MailBox.Address.shut()
-	org.T_T.CleanUpdates()
-	// 发送解散通知
-	for mailBoxAddress, _ := range org.MailBox.AddressMap.dissolveAddressMap {
-		this.sendDissolve(mailBoxAddress)
-	}
-	// 发送遗嘱
-	for mailBoxAddress, _ := range org.MailBox.AddressMap.testamentAddressMap {
-		this.sendTestament(mailBoxAddress)
-	}
+	org.T_T.CleanUpdates()     // 关闭循环
+	org.MailBox.Address.shut() // 在关闭邮箱
 }
 
 func (this *leader) getUpdateEndTimeChan() chan int64 {
@@ -361,15 +432,15 @@ func (this *updateInfo) close() {
 // 邮箱
 type mailBox struct {
 	AddressMap     addressMap             // 通讯录
-	mail           Mail                   // 邮件
+	mail           mail                   // 邮件
 	Address        MailBoxAddress         // 邮箱地址
 	org            *Provision             // 当前邮箱的组织
 	authorizations map[string]interface{} // 授权
 }
 
 // 写邮件
-func (this *mailBox) Write() Draft {
-	return Draft{isSystem: false,
+func (this *mailBox) Write() draft {
+	return draft{isSystem: false,
 		senderAddress:    this.Address,
 		senderGroupName:  this.org.groupName,
 		senderOrgName:    this.org.orgName,
@@ -377,7 +448,7 @@ func (this *mailBox) Write() Draft {
 }
 
 // 读邮件
-func (this *mailBox) Read() *Mail {
+func (this *mailBox) Read() *mail {
 	this.mail.recipientGroupName = this.org.groupName
 	this.mail.recipientOrgName = this.org.orgName
 	return &this.mail
@@ -388,36 +459,58 @@ type MailBoxAddress struct {
 	mutex   *sync.RWMutex
 	mailBox *mailBox  // 邮箱
 	isShut  *bool     // 是否邮箱地址已经被关闭
-	address chan Mail // 邮箱地址
+	address chan mail // 邮箱地址
 }
 
 // 关闭邮箱
 func (this *MailBoxAddress) shut() {
 	this.mutex.Lock()         // 加锁
-	defer this.mutex.Unlock() // 解锁
 	if *this.isShut == true { // 如果当前邮箱已经关闭直接返回
+		this.mutex.Unlock() // 解锁
 		return
 	}
 	close(this.address) // 关闭邮箱
+	// 发送解散通知
+	for mailBoxAddress, _ := range this.mailBox.AddressMap.dissolveAddressMap {
+		this.sendDissolve(mailBoxAddress)
+	}
+	// 发送遗嘱
+	for mailBoxAddress, _ := range this.mailBox.AddressMap.testamentAddressMap {
+		this.sendTestament(mailBoxAddress)
+	}
 	*this.isShut = true // 否则设置当前邮箱已关闭
+	this.mutex.Unlock() // 解锁
+}
+
+// 发送遗嘱
+func (this *MailBoxAddress) sendTestament(mailBoxAddress MailBoxAddress) {
+	draft := this.mailBox.Write()
+	draft.isSystem = true
+	draft.recipientAddress = mailBoxAddress
+	draft.recipientServerName = "Testament"
+	draft.Send()
+}
+
+// 发送解散
+func (this *MailBoxAddress) sendDissolve(mailBoxAddress MailBoxAddress) {
+	draft := this.mailBox.Write()
+	draft.isSystem = true
+	draft.recipientAddress = mailBoxAddress
+	draft.recipientServerName = "dissolve"
+	draft.Send()
 }
 
 // 把数据放入邮箱
-func (this *MailBoxAddress) send(mail Mail) bool {
-	this.mutex.Lock()         // 加锁
-	defer this.mutex.Unlock() // 函数结束自动解锁
-	if *this.isShut == true { // 如果当前地址已经关闭返回发送失败
-		return false
+func (this *MailBoxAddress) send(mail mail) (ok bool) {
+	this.mutex.Lock() // 加锁
+	if *this.isShut { // 如果当前地址已经关闭返回发送失败
+		this.mutex.Unlock() // 函数结束自动解锁
+		ok = false
+		return
 	}
 	this.address <- mail // 否则发送数据
-	return true          // 返回发送失败
-}
-
-// 邮箱是否关闭?
-func (this *MailBoxAddress) IsShut() (isShut bool) {
-	this.mutex.RLock() // 加锁
-	isShut = *this.isShut
-	this.mutex.RUnlock() // 函数结束自动解锁
+	ok = true            // 返回发送失败
+	this.mutex.Unlock()  // 函数结束自动解锁
 	return
 }
 
@@ -556,11 +649,11 @@ func (this *addressMap) SendForFriends(friendsName string, recipientServerName s
 		return
 	}
 	mailBox := (*mailBox)(unsafe.Pointer(this))
-	Draft := mailBox.Write()
-	Draft.recipientServerName = recipientServerName
+	draft := mailBox.Write()
+	draft.recipientServerName = recipientServerName
 	for mailBoxAddress, _ := range mailBoxsAddress {
-		Draft.recipientAddress = mailBoxAddress
-		Draft.Send()
+		draft.recipientAddress = mailBoxAddress
+		draft.Send()
 	}
 
 }
@@ -568,18 +661,18 @@ func (this *addressMap) SendForFriends(friendsName string, recipientServerName s
 // 发送数据给所有好友
 func (this *addressMap) SendForAllFriends(recipientServerName string, remarks map[string]interface{}, contents ...interface{}) {
 	mailBox := (*mailBox)(unsafe.Pointer(this))
-	Draft := mailBox.Write()
-	Draft.recipientServerName = recipientServerName
+	draft := mailBox.Write()
+	draft.recipientServerName = recipientServerName
 	for _, mailBoxsAddress := range this.addressMap {
 		for mailBoxAddress, _ := range mailBoxsAddress {
-			Draft.recipientAddress = mailBoxAddress
-			Draft.Send()
+			draft.recipientAddress = mailBoxAddress
+			draft.Send()
 		}
 	}
 }
 
 // 邮件
-type Mail struct {
+type mail struct {
 	isSystem            bool           // 是否是系统邮件
 	senderAddress       MailBoxAddress // 发件人地址
 	senderGroupName     string         // 发送人组名
@@ -593,91 +686,97 @@ type Mail struct {
 }
 
 // 获取发件人地址
-func (this *Mail) SenderAddress() MailBoxAddress {
+func (this *mail) SenderAddress() MailBoxAddress {
 	return this.senderAddress
 }
 
 // 获取发件人组名
-func (this *Mail) SenderGroupName() string {
+func (this *mail) SenderGroupName() string {
 	return this.senderGroupName
 }
 
 // 获取发件人组织名
-func (this *Mail) SenderOrgName() string {
+func (this *mail) SenderOrgName() string {
 	return this.senderOrgName
 }
 
 // 获取发件人服务名
-func (this *Mail) SenderServerName() string {
+func (this *mail) SenderServerName() string {
 	return this.senderServerName
 }
 
 // 获取收件人服务名
-func (this *Mail) RecipientServerName() string {
+func (this *mail) RecipientServerName() string {
 	return this.recipientServerName
 }
 
 // 获取邮件内容
-func (this *Mail) Content() []interface{} {
+func (this *mail) Content() []interface{} {
 	return this.contents
 }
 
 // 回复
-func (this Mail) Reply() Draft {
-	Draft := Draft(this)                             // 创建新草稿
-	senderAddress := Draft.senderAddress             // 临时储存发送者
-	Draft.senderAddress = Draft.recipientAddress     // 接收地址变成发送地址
-	Draft.senderGroupName = Draft.recipientGroupName // 接受组名变发送组名
-	Draft.senderOrgName = Draft.recipientOrgName     // 接受组织名变发送组织名
-	recipientServerName := Draft.senderServerName
-	Draft.senderServerName = Draft.recipientServerName // 接收人变成发送人
-	Draft.recipientAddress = senderAddress             // 发送地址变成接收地址
-	Draft.recipientServerName = recipientServerName    // 设置接收人
-	Draft.contents = nil                               // 内容待设置
-	return Draft                                       // 返回这个草稿
+func (this mail) Reply() draft {
+	draft := draft(this)                               // 创建新草稿
+	senderAddress := draft.senderAddress               // 临时储存发送者
+	draft.senderAddress = draft.recipientAddress       // 接收地址变成发送地址
+	draft.senderGroupName = draft.recipientGroupName   // 接受组名变发送组名
+	draft.senderOrgName = draft.recipientOrgName       // 接受组织名变发送组织名
+	recipientServerName := draft.senderServerName      // 接受人服务名称
+	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
+	draft.recipientAddress = senderAddress             // 发送地址变成接收地址
+	draft.recipientServerName = recipientServerName    // 设置接收人
+	draft.contents = nil                               // 内容待设置
+	return draft                                       // 返回这个草稿
 }
 
 // 转发
-func (this Mail) Forward(recipientAddress MailBoxAddress, recipientServerName string) Draft {
-	Draft := Draft(this)                               // 创建新草稿
-	Draft.senderAddress = Draft.recipientAddress       // 接收地址变成发送地址
-	Draft.senderGroupName = Draft.recipientGroupName   // 接受组名变发送组名
-	Draft.senderOrgName = Draft.recipientOrgName       // 接受组织名变发送组织名
-	Draft.senderServerName = Draft.recipientServerName // 接收人变成发送人
-	Draft.recipientAddress = recipientAddress          // 设置接收地址
-	Draft.recipientServerName = recipientServerName    // 设置接收人
-	return Draft                                       // 返回这个草稿
+func (this mail) Forward(recipientAddress MailBoxAddress, recipientServerName string) draft {
+	draft := draft(this)                               // 创建新草稿
+	draft.senderAddress = draft.recipientAddress       // 接收地址变成发送地址
+	draft.senderGroupName = draft.recipientGroupName   // 接受组名变发送组名
+	draft.senderOrgName = draft.recipientOrgName       // 接受组织名变发送组织名
+	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
+	draft.recipientAddress = recipientAddress          // 设置接收地址
+	draft.recipientServerName = recipientServerName    // 设置接收人
+	return draft                                       // 返回这个草稿
 }
 
 // 草稿
-type Draft Mail
+type draft mail
 
 // 设置收件人地址
-func (this *Draft) RecipientAddress(mailBoxAddress MailBoxAddress) {
+func (this *draft) RecipientAddress(mailBoxAddress MailBoxAddress) {
 	this.recipientAddress = mailBoxAddress
 }
 
 // 设置收件人名字
-func (this *Draft) RecipientServerName(name string) {
+func (this *draft) RecipientServerName(name string) {
 	this.recipientServerName = name
 }
 
 // 设置发件人名字
-func (this *Draft) SendServerName(name string) {
+func (this *draft) SendServerName(name string) {
 	this.senderServerName = name
 }
 
 // 设置草稿内容
-func (this *Draft) Content(contents ...interface{}) {
+func (this *draft) Content(contents ...interface{}) {
 	this.contents = contents
 }
 
 // 发送草稿(如果发送的地址或者接收人不存在返回false)
-func (this Draft) Send() (ok bool) {
+func (this draft) Send() (ok bool) {
 
 	if this.recipientAddress.address == nil {
 		return false
 	}
 
-	return this.recipientAddress.send(Mail(this))
+	// 发送给自己
+	if this.recipientAddress.address == this.senderAddress.address {
+		this.recipientAddress.address <- mail(this)
+		return true
+	}
+
+	return this.recipientAddress.send(mail(this))
 }

@@ -38,7 +38,7 @@ func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...i
 // 组织规定规范
 type provision interface {
 	init(pactGroupName, pactRegisterName string, mailLen int, overTime int64) (newMailBoxAddress MailBoxAddress)
-	deliverMailForMailBox(newMail Mail)
+	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
 	routineStart()
@@ -211,6 +211,7 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 		for {
 			select {
 			case mail, ok := <-newMailBoxAddress.address:
+
 				if !ok {
 					org.Terminate()
 					return
@@ -222,7 +223,7 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 						continue
 					} else if mail.recipientServerName == "dissolve" {
 						T_T.Dissolve()
-						return
+						continue
 					}
 				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
@@ -291,16 +292,16 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 					org.Terminate()
 					return
 				}
-				if mail.isSystem {
-					if mail.recipientGroupName == "Testament" {
-						org.deliverMailForMailBox(mail)
-						org.Testament()
-						continue
-					} else if mail.recipientServerName == "dissolve" {
-						T_T.Dissolve()
-						return
-					}
+				//				if mail.isSystem {
+				if mail.recipientGroupName == "Testament" {
+					org.deliverMailForMailBox(mail)
+					org.Testament()
+					continue
+				} else if mail.recipientServerName == "dissolve" {
+					T_T.Dissolve()
+					continue
 				}
+				//				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue
