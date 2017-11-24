@@ -44,7 +44,8 @@ type provision interface {
 	routineStart()
 	RoutineStart()
 	RoutineEnd()
-	Testament()
+	isMourn() bool
+	Mourn()
 	Terminate()
 }
 
@@ -210,19 +211,16 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 		org.Init(initPars...)
 		for {
 			select {
-			case mail, ok := <-newMailBoxAddress.address:
-
-				if !ok {
-					org.Terminate()
-					return
-				}
+			case <-newMailBoxAddress.isShut:
+				org.Terminate()
+				return
+			case mail, _ := <-newMailBoxAddress.address:
 				if mail.isSystem {
-					if mail.recipientGroupName == "Testament" {
-						org.deliverMailForMailBox(mail)
-						org.Testament()
-						continue
-					} else if mail.recipientServerName == "dissolve" {
-						T_T.Dissolve()
+					org.deliverMailForMailBox(mail)
+					if mail.recipientServerName == "DeathNotice" {
+						if org.isMourn() {
+							org.Mourn()
+						}
 						continue
 					}
 				}
@@ -262,7 +260,7 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 					return
 				}
 			case <-time.After(time.Duration((endTime - time.Now().Unix()) * 1e9)):
-				T_T.Dissolve()
+				T_T.timeOut()
 				return
 			}
 		}
@@ -286,22 +284,23 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 		org.Init(initPars...)
 		for {
 			select {
-			case mail, ok := <-newMailBoxAddress.address:
-				if !ok {
-					close(updateEndTime)
-					org.Terminate()
-					return
-				}
-				//				if mail.isSystem {
-				if mail.recipientGroupName == "Testament" {
+			case <-newMailBoxAddress.isShut:
+				close(updateEndTime)
+				org.Terminate()
+				return
+			case mail, _ := <-newMailBoxAddress.address:
+				if mail.isSystem {
 					org.deliverMailForMailBox(mail)
-					org.Testament()
-					continue
-				} else if mail.recipientServerName == "dissolve" {
-					T_T.Dissolve()
-					continue
+					if mail.recipientServerName == "DeathNotice" {
+						if org.isMourn() {
+							org.Mourn()
+						}
+						continue
+					} else if mail.recipientServerName == "TimeOut" {
+						T_T.Dissolve()
+						continue
+					}
 				}
-				//				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
 					continue

@@ -24,12 +24,11 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	this.MailBox.org = this
 	this.MailBox.Address.mailBox = &this.MailBox
 	this.MailBox.Address.address = make(chan mail, mailLen)
-	this.MailBox.Address.mutex = &sync.RWMutex{}
-	isShut := false
-	this.MailBox.Address.isShut = &isShut
+	this.MailBox.Address.mutex = &sync.Mutex{}
+	this.MailBox.Address.isShut = make(chan struct{}, 0)
 	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]struct{})
-	this.MailBox.AddressMap.dissolveAddressMap = make(map[MailBoxAddress]struct{})
-	this.MailBox.AddressMap.testamentAddressMap = make(map[MailBoxAddress]struct{})
+	this.MailBox.AddressMap.deathNote = &sync.Map{}
+	this.MailBox.AddressMap.mournNote = &sync.Map{}
 	this.MailBox.authorizations = make(map[string]interface{})
 	this.T_T.runningUpdates = make(map[Uid]struct{})
 	this.T_T.updateNotify = make(chan *updateInfo, 0)
@@ -63,8 +62,22 @@ func (this *Provision) RoutineStart() {}
 // 例行公事收尾
 func (this *Provision) RoutineEnd() {}
 
+// 判断是否调用吊念
+func (this *Provision) isMourn() bool {
+	val, ok := this.MailBox.AddressMap.mournNote.Load(this.MailBox.mail.senderAddress)
+	if ok {
+		this.MailBox.AddressMap.mournNote.Delete(this.MailBox.mail.senderAddress)
+		if val.(bool) == true {
+			this.T_T.Dissolve()
+			return false
+		}
+		return true
+	}
+	return false
+}
+
 // 遗嘱
-func (this *Provision) Testament() {}
+func (this *Provision) Mourn() {}
 
 // 组织解散
 func (this *Provision) Terminate() {}
@@ -179,214 +192,232 @@ func (this *leader) SetEndTime(newEndTime int64) {
 }
 
 // 建立连接(共生死)
-func (this *leader) LinkDD(mailBoxAddress MailBoxAddress) {
+func (this *leader) LinkDD(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了那我也要死
-		mailBoxAddress.mutex.Unlock()
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死你就死
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, true)
+
+	// 你死我就死
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, true)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了我也死
 		this.Dissolve()
-	} else {
-		// 我死你也死
-		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 你死我也死
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
+	default:
 	}
 }
 
-// 建立连接(我死告诉你，你死告诉我)
-func (this *leader) LinkTT(mailBoxAddress MailBoxAddress) {
+// 建立连接(我死你办事，你死我办事)
+func (this *leader) LinkMM(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
-		mailBoxAddress.mutex.Unlock()
-		this.sendTestamentForMe(org, mailBoxAddress)
-	} else {
-		// 你死告诉我
-		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 我死告诉你
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死你办事
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, false)
+
+	// 你死我办事
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, false)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了调用吊念函数
+		this.sendTestamentForMe(org, hisAddr)
+	default:
 	}
 }
 
-// 建立连接(我死你也死，你死告诉我)
-func (this *leader) LinkDT(mailBoxAddress MailBoxAddress) {
+// 建立连接(我死你也死，你死我办事)
+func (this *leader) LinkDM(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
-		mailBoxAddress.mutex.Unlock()
-		this.sendTestamentForMe(org, mailBoxAddress)
-	} else {
-		// 你死告诉我
-		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 我死你也死
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
-	}
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
 
+	// 我死你就死
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, true)
+
+	// 你死我办事
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, false)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了调用吊念函数
+		this.sendTestamentForMe(org, hisAddr)
+	default:
+	}
 }
 
-// 建立连接(我死告诉你，你死我也死)
-func (this *leader) LinkTD(mailBoxAddress MailBoxAddress) {
+// 建立连接(我死你办事，你死我也死)
+func (this *leader) LinkMD(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了调用遗嘱函数
-		mailBoxAddress.mutex.Unlock()
-		this.sendTestamentForMe(org, mailBoxAddress)
-	} else {
-		// 你死我也死
-		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 我死告诉你
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死你办事
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, false)
+
+	// 你死我就死
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, true)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了我也死
+		this.Dissolve()
+	default:
 	}
 }
 
 // 建立连接(我死你也死，你死无所谓)
-func (this *leader) LinkD_(mailBoxAddress MailBoxAddress) {
+func (this *leader) LinkD_(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	// 如果你没死
-	if !*mailBoxAddress.isShut {
-		// 你死我所谓
-		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
-		if ok {
-			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
-		}
-		mailBoxAddress.mutex.Unlock()
-		// 我死你也死
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
-	}
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
 
+	// 我死你就死
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, true)
+
+	// 你死无所谓
+	hisAddrMap.deathNote.Delete(myAddr)
+	myAddrMap.mournNote.Delete(hisAddr)
 }
 
 // 建立连接(我死无所谓，你死我也死)
-func (this *leader) Link_D(mailBoxAddress MailBoxAddress) {
+func (this *leader) Link_D(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	org.MailBox.Address.mutex.Unlock()
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了我也死
-		mailBoxAddress.mutex.Unlock()
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死无所谓
+	myAddrMap.deathNote.Delete(hisAddr)
+	hisAddrMap.mournNote.Delete(myAddr)
+
+	// 你死我就死
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, true)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了我也死
 		this.Dissolve()
-	} else {
-		// 你死我就死
-		mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 我死无所谓
-		org.MailBox.Address.mutex.Lock()
-		_, ok := org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
-		if ok {
-			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
-		}
-	}
-
-}
-
-// 建立连接(我死告诉你，你死无所谓)
-func (this *leader) LinkT_(mailBoxAddress MailBoxAddress) {
-	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
-		return
-	}
-	mailBoxAddress.mutex.Lock()
-	if !*mailBoxAddress.isShut {
-		// 你死无所谓
-		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
-		if ok {
-			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
-		}
-		mailBoxAddress.mutex.Unlock()
-		// 我死告诉你
-		org.MailBox.Address.mutex.Lock()
-		org.MailBox.AddressMap.testamentAddressMap[mailBoxAddress] = struct{}{}
-		org.MailBox.Address.mutex.Unlock()
+	default:
 	}
 }
 
-// 建立连接(我死无所谓，你死告诉我)
-func (this *leader) Link_T(mailBoxAddress MailBoxAddress) {
+// 建立连接(我死你办事，你死无所谓)
+func (this *leader) LinkM_(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if *mailBoxAddress.isShut { // 如果对面已经死了冒充对方发送遗嘱给自己
-		mailBoxAddress.mutex.Unlock()
-		this.sendTestamentForMe(org, mailBoxAddress)
-	} else {
-		// 你死告诉我
-		mailBoxAddress.mailBox.AddressMap.testamentAddressMap[org.MailBox.Address] = struct{}{}
-		mailBoxAddress.mutex.Unlock()
-		// 我死无所谓
-		org.MailBox.Address.mutex.Lock()
-		_, ok := org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
-		if ok {
-			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
-		}
-		org.MailBox.Address.mutex.Unlock()
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死你办事
+	myAddrMap.deathNote.Store(hisAddr, struct{}{})
+	hisAddrMap.mournNote.Store(myAddr, false)
+
+	// 你死无所谓
+	hisAddrMap.deathNote.Delete(myAddr)
+	myAddrMap.mournNote.Delete(hisAddr)
+}
+
+// 建立连接(我死无所谓，你死我办事)
+func (this *leader) Link_M(hisAddr MailBoxAddress) {
+	org := (*Provision)(unsafe.Pointer(this))
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+		return
 	}
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死无所谓
+	myAddrMap.deathNote.Delete(hisAddr)
+	hisAddrMap.mournNote.Delete(myAddr)
+
+	// 你死我办事
+	hisAddrMap.deathNote.Store(myAddr, struct{}{})
+	myAddrMap.mournNote.Store(hisAddr, false)
+
+	select {
+	case <-hisAddr.isShut: // 如果对面已经死了调用吊念函数
+		this.sendTestamentForMe(org, hisAddr)
+	default:
+	}
+
 }
 
 // 解除连接
-func (this *leader) Link__(mailBoxAddress MailBoxAddress) {
+func (this *leader) Link__(hisAddr MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if mailBoxAddress == org.MailBox.Address || mailBoxAddress.mailBox == nil {
+	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	mailBoxAddress.mutex.Lock()
-	if !*mailBoxAddress.isShut {
-		// 你死无所谓
-		_, ok := mailBoxAddress.mailBox.AddressMap.dissolveAddressMap[org.MailBox.Address]
-		if ok {
-			delete(mailBoxAddress.mailBox.AddressMap.dissolveAddressMap, org.MailBox.Address)
-		}
-		mailBoxAddress.mutex.Unlock()
-		// 我死无所谓
-		org.MailBox.Address.mutex.Lock()
-		_, ok = org.MailBox.AddressMap.dissolveAddressMap[mailBoxAddress]
-		if ok {
-			delete(org.MailBox.AddressMap.dissolveAddressMap, mailBoxAddress)
-		}
-		org.MailBox.Address.mutex.Unlock()
-	}
+	myAddr := org.MailBox.Address
+	myAddrMap := org.MailBox.AddressMap
+	hisAddrMap := hisAddr.mailBox.AddressMap
+
+	// 我死无所谓
+	myAddrMap.deathNote.Delete(hisAddr)
+	hisAddrMap.mournNote.Delete(myAddr)
+
+	// 你死无所谓
+	hisAddrMap.deathNote.Delete(myAddr)
+	myAddrMap.mournNote.Delete(hisAddr)
 }
 
 // 冒充对方发送遗嘱给自己
 func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAddress) {
 	draft := org.MailBox.Write()
+	draft.isSystem = true
 	draft.senderAddress = mailBoxAddress
 	draft.senderServerName = ""
 	draft.recipientAddress = org.MailBox.Address
-	draft.recipientServerName = "Testament"
+	draft.recipientServerName = "DeathNotice"
+	draft.Send()
+}
+
+// 更新时间用goroutine通知组织解体
+func (this *leader) timeOut() {
+	org := (*Provision)(unsafe.Pointer(this))
+	draft := org.MailBox.Write()
+	draft.isSystem = true
+	draft.senderServerName = ""
+	draft.recipientAddress = org.MailBox.Address
+	draft.recipientServerName = "TimeOut"
 	draft.Send()
 }
 
@@ -397,6 +428,7 @@ func (this *leader) Dissolve() {
 	org.MailBox.Address.shut() // 在关闭邮箱
 }
 
+// 获取剩余时间
 func (this *leader) getUpdateEndTimeChan() chan int64 {
 	org := (*Provision)(unsafe.Pointer(this))
 	return org.updateEndTime
@@ -456,69 +488,58 @@ func (this *mailBox) Read() *mail {
 
 // 邮箱地址(封装一层是因为不想让用户直接操作通道)
 type MailBoxAddress struct {
-	mutex   *sync.RWMutex
-	mailBox *mailBox  // 邮箱
-	isShut  *bool     // 是否邮箱地址已经被关闭
-	address chan mail // 邮箱地址
+	mutex   *sync.Mutex
+	mailBox *mailBox      // 邮箱
+	address chan mail     // 邮箱地址
+	isShut  chan struct{} // 关闭用通道
 }
 
 // 关闭邮箱
 func (this *MailBoxAddress) shut() {
-	this.mutex.Lock()         // 加锁
-	if *this.isShut == true { // 如果当前邮箱已经关闭直接返回
-		this.mutex.Unlock() // 解锁
+	select {
+	case <-this.isShut: // 如果已经关闭了不做操作
 		return
-	}
-	close(this.address) // 关闭邮箱
-	// 发送解散通知
-	for mailBoxAddress, _ := range this.mailBox.AddressMap.dissolveAddressMap {
-		this.sendDissolve(mailBoxAddress)
-	}
-	// 发送遗嘱
-	for mailBoxAddress, _ := range this.mailBox.AddressMap.testamentAddressMap {
-		this.sendTestament(mailBoxAddress)
-	}
-	*this.isShut = true // 否则设置当前邮箱已关闭
-	this.mutex.Unlock() // 解锁
-}
+	default:
+		i := 0
+		this.mailBox.AddressMap.deathNote.Range(
+			func(key interface{}, val interface{}) bool {
+				i++
+				return true
+			})
 
-// 发送遗嘱
-func (this *MailBoxAddress) sendTestament(mailBoxAddress MailBoxAddress) {
-	draft := this.mailBox.Write()
-	draft.isSystem = true
-	draft.recipientAddress = mailBoxAddress
-	draft.recipientServerName = "Testament"
-	draft.Send()
-}
+		// 关闭邮箱
+		close(this.isShut)
 
-// 发送解散
-func (this *MailBoxAddress) sendDissolve(mailBoxAddress MailBoxAddress) {
-	draft := this.mailBox.Write()
-	draft.isSystem = true
-	draft.recipientAddress = mailBoxAddress
-	draft.recipientServerName = "dissolve"
-	draft.Send()
+		// 发送死亡通知
+		this.mailBox.AddressMap.deathNote.Range(
+			func(key interface{}, val interface{}) bool {
+				draft := this.mailBox.Write()
+				draft.isSystem = true
+				draft.recipientAddress = key.(MailBoxAddress)
+				draft.recipientServerName = "DeathNotice"
+				draft.Send()
+				return true
+			})
+	}
 }
 
 // 把数据放入邮箱
 func (this *MailBoxAddress) send(mail mail) (ok bool) {
-	this.mutex.Lock() // 加锁
-	if *this.isShut { // 如果当前地址已经关闭返回发送失败
-		this.mutex.Unlock() // 函数结束自动解锁
+
+	select {
+	case <-this.isShut:
 		ok = false
-		return
+	case this.address <- mail: // 否则发送数据
+		ok = true // 返回发送失败
 	}
-	this.address <- mail // 否则发送数据
-	ok = true            // 返回发送失败
-	this.mutex.Unlock()  // 函数结束自动解锁
 	return
 }
 
 // 授权
 func (this *MailBoxAddress) Remark(key string) (val interface{}, ok bool) {
-	this.mutex.RLock()
+	this.mutex.Lock()
 	val, ok = this.mailBox.authorizations[key]
-	this.mutex.RUnlock()
+	this.mutex.Unlock()
 	return
 }
 
@@ -544,13 +565,14 @@ func (this *MailBoxAddress) RemoveAllRemarks() {
 
 // 通讯录
 type addressMap struct {
-	addressMap          map[string]map[MailBoxAddress]struct{}
-	dissolveAddressMap  map[MailBoxAddress]struct{} // 我死的时候要杀死的人
-	testamentAddressMap map[MailBoxAddress]struct{} // 我死的时候要通知的人
+	addressMap map[string]map[MailBoxAddress]struct{}
+	deathNote  *sync.Map // 我死的时候要通知的人
+	mournNote  *sync.Map // 听这些人的遗嘱(ture表示我一起死，flase表示吊念)
 }
 
 // 添加好友
 func (this *addressMap) AddFriend(friendName string, mailBoxAddress MailBoxAddress) {
+
 	_, ok := this.addressMap[friendName]
 	if !ok {
 		this.addressMap[friendName] = make(map[MailBoxAddress]struct{})
@@ -770,12 +792,6 @@ func (this draft) Send() (ok bool) {
 
 	if this.recipientAddress.address == nil {
 		return false
-	}
-
-	// 发送给自己
-	if this.recipientAddress.address == this.senderAddress.address {
-		this.recipientAddress.address <- mail(this)
-		return true
 	}
 
 	return this.recipientAddress.send(mail(this))
