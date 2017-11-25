@@ -16,9 +16,8 @@ func WaitClose() {
 // como关闭
 func Close() {
 	select {
-	case <-waitCloseChan:
-		waitCloseChan <- struct{}{}
 	case waitCloseChan <- struct{}{}:
+	default:
 	}
 
 }
