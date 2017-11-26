@@ -234,14 +234,12 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 				org.Terminate()
 				return
 			case mail, _ := <-newMailBoxAddress.address:
-				if mail.isSystem {
+				if mail.systemTag == mailSystemTag_deathNotice {
 					org.deliverMailForMailBox(mail)
-					if mail.recipientServerName == "DeathNotice" {
-						if org.isMourn() {
-							org.Mourn()
-						}
-						continue
+					if org.isMourn() {
+						org.Mourn()
 					}
+					continue
 				}
 				method, ok := planningMethodsMap[mail.recipientServerName]
 				if !ok {
@@ -308,14 +306,14 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 				org.Terminate()
 				return
 			case mail, _ := <-newMailBoxAddress.address:
-				if mail.isSystem {
-					org.deliverMailForMailBox(mail)
-					if mail.recipientServerName == "DeathNotice" {
+				if mail.systemTag != mailSystemTag__ {
+					if mail.systemTag == mailSystemTag_deathNotice {
+						org.deliverMailForMailBox(mail)
 						if org.isMourn() {
 							org.Mourn()
 						}
 						continue
-					} else if mail.recipientServerName == "TimeOut" {
+					} else if mail.systemTag == mailSystemTag_timeOut {
 						T_T.Dissolve()
 						continue
 					}

@@ -402,11 +402,10 @@ func (this *leader) Link__(hisAddr MailBoxAddress) {
 // 冒充对方发送遗嘱给自己
 func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAddress) {
 	draft := org.MailBox.Write()
-	draft.isSystem = true
+	draft.systemTag = mailSystemTag_deathNotice
 	draft.senderAddress = mailBoxAddress
 	draft.senderServerName = ""
 	draft.recipientAddress = org.MailBox.Address
-	draft.recipientServerName = "DeathNotice"
 	draft.Send()
 }
 
@@ -414,10 +413,9 @@ func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAdd
 func (this *leader) timeOut() {
 	org := (*Provision)(unsafe.Pointer(this))
 	draft := org.MailBox.Write()
-	draft.isSystem = true
+	draft.systemTag = mailSystemTag_timeOut
 	draft.senderServerName = ""
 	draft.recipientAddress = org.MailBox.Address
-	draft.recipientServerName = "TimeOut"
 	draft.Send()
 }
 
@@ -472,7 +470,7 @@ type mailBox struct {
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{isSystem: false,
+	return draft{systemTag: mailSystemTag__,
 		senderAddress:    this.Address,
 		senderGroupName:  this.org.groupName,
 		senderOrgName:    this.org.orgName,
@@ -514,9 +512,8 @@ func (this *MailBoxAddress) shut() {
 		this.mailBox.AddressMap.deathNote.Range(
 			func(key interface{}, val interface{}) bool {
 				draft := this.mailBox.Write()
-				draft.isSystem = true
+				draft.systemTag = mailSystemTag_deathNotice
 				draft.recipientAddress = key.(MailBoxAddress)
-				draft.recipientServerName = "DeathNotice"
 				draft.Send()
 				return true
 			})
@@ -693,9 +690,19 @@ func (this *addressMap) SendForAllFriends(recipientServerName string, remarks ma
 	}
 }
 
+// 邮箱系统标签枚举类型
+type mailSystemTag int32
+
+// 邮箱标签枚举
+const (
+	mailSystemTag__ mailSystemTag = iota
+	mailSystemTag_deathNotice
+	mailSystemTag_timeOut
+)
+
 // 邮件
 type mail struct {
-	isSystem            bool           // 是否是系统邮件
+	systemTag           mailSystemTag  // 邮箱系统标识符
 	senderAddress       MailBoxAddress // 发件人地址
 	senderGroupName     string         // 发送人组名
 	senderOrgName       string         // 发送人组织名
