@@ -6,29 +6,11 @@ import (
 	"time"
 )
 
-var waitCloseChan chan struct{}
-
-// 等待como关闭
-func WaitClose() {
-	<-waitCloseChan
-}
-
-// como关闭
-func Close() {
-	select {
-	case waitCloseChan <- struct{}{}:
-	default:
-	}
-
-}
-
 // 公约实例
 var Pact *pacts
 
 // 初始化公约实例
-func init() {
-	// 创建等待关闭通道
-	waitCloseChan = make(chan struct{}, 1)
+func pactInit() {
 	// 创建公约
 	staticOrg := &staticPact{groups: make(map[string]map[string]MailBoxAddress)}
 	dynamicOrg := &dynamicPact{groups: make(map[string]map[string]dynamicOrgInfo)}
