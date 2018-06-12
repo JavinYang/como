@@ -470,11 +470,13 @@ type mailBox struct {
 
 // 写邮件
 func (this *mailBox) Write() draft {
-	return draft{systemTag: mailSystemTag__,
-		senderAddress:    this.Address,
-		senderGroupName:  this.org.groupName,
-		senderOrgName:    this.org.orgName,
-		senderServerName: this.mail.recipientServerName}
+	newDraft := draftPoll.Get().(draft)
+	newDraft.systemTag = mailSystemTag__
+	newDraft.senderAddress = this.Address
+	newDraft.senderGroupName = this.org.groupName
+	newDraft.senderOrgName = this.org.orgName
+	newDraft.senderServerName = this.mail.recipientServerName
+	return newDraft
 }
 
 // 读邮件
@@ -800,6 +802,10 @@ func (this draft) Send() (ok bool) {
 	if this.recipientAddress.address == nil {
 		return false
 	}
-
 	return this.recipientAddress.send(mail(this))
+}
+
+// 草稿池
+var draftPoll = sync.Pool{
+	New: func() interface{} { return draft{} },
 }

@@ -1,9 +1,11 @@
 package como
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
+	"unsafe"
 )
 
 // 公约实例
@@ -76,6 +78,7 @@ NEW_ORG:
 	group[orgName] = newMailBoxAddress
 	this.groups[groupName] = group
 	orgReflect := reflect.ValueOf(org)
+	fmt.Println("??", reflect.Indirect(orgReflect).Type().Size())
 
 	runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 }
@@ -125,7 +128,7 @@ type dynamicOrgInfo struct {
 }
 
 // 加入动态组织 overtime == -1 永不超时
-func (this *dynamicPact) Join(groupName, orgName string, provision provision, mailLen int, overtime int64) {
+func (this *dynamicPact) Join(groupName, orgName string, org provision, mailLen int, overtime int64) {
 
 	group, ok := this.groups[groupName]
 	if !ok {
@@ -139,7 +142,7 @@ func (this *dynamicPact) Join(groupName, orgName string, provision provision, ma
 	}
 
 NEW_ORG:
-	group[orgName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(provision)).Type(), mailLen, overtime}
+	group[orgName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(org)).Type(), mailLen, overtime}
 	this.groups[groupName] = group
 }
 
@@ -167,7 +170,7 @@ func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{})
 	return newMailBoxAddress, true
 }
 
-// 获取制定静态组信息
+// 获取制定动态组信息
 func (this *dynamicPact) GetGroupInfo(groupName string) (GroupsInfo string) {
 	group, ok := this.groups[groupName]
 	if !ok {
@@ -180,7 +183,7 @@ func (this *dynamicPact) GetGroupInfo(groupName string) (GroupsInfo string) {
 	return
 }
 
-// 获取所有静态组信息
+// 获取所有动态组信息
 func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
 	GroupsInfo += "\n----------DYNAMIC_PACT----------\n"
 	for groupName, _ := range this.groups {
@@ -235,6 +238,7 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 				}
 				method()
 				org.RoutineEnd()
+				draftPoll.Put(draft(mail))
 			case updateInfo, _ := <-T_T.updateNotify:
 				updateInfo.run()
 			}
@@ -312,9 +316,29 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 				}
 				method()
 				org.RoutineEnd()
+				draftPoll.Put(draft(mail))
 			case updateInfo, _ := <-T_T.updateNotify:
 				updateInfo.run()
 			}
 		}
 	}()
+}
+
+func memsetZero(pointer uintptr, size uintptr) {
+
+	tailPointer := pointer + size
+	int64Len := unsafe.Sizeof(int64(0))
+	tail := size % int64Len               // 剩下的尾巴长度
+	buttocksPointer := tailPointer - tail // 屁股的位置 = 尾巴位置 - 尾巴长度
+
+	// 循环到屁股
+	for ; pointer < buttocksPointer; pointer += int64Len {
+		pData := (*int64)(unsafe.Pointer(pointer))
+		*pData = 0
+	}
+	// 如果有尾巴就从屁股开始循环尾巴
+	for ; buttocksPointer < tailPointer; buttocksPointer++ {
+		pData := (*byte)(unsafe.Pointer(buttocksPointer))
+		*pData = 0
+	}
 }
