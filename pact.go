@@ -324,21 +324,30 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 	}()
 }
 
+// 初始化内存
 func memsetZero(pointer uintptr, size uintptr) {
 
 	tailPointer := pointer + size
-	int64Len := unsafe.Sizeof(int64(0))
-	tail := size % int64Len               // 剩下的尾巴长度
+	int64Size := unsafe.Sizeof(int64(0))
+	tail := size % int64Size              // 剩下的尾巴长度
 	buttocksPointer := tailPointer - tail // 屁股的位置 = 尾巴位置 - 尾巴长度
 
-	// 循环到屁股
-	for ; pointer < buttocksPointer; pointer += int64Len {
-		pData := (*int64)(unsafe.Pointer(pointer))
-		*pData = 0
-	}
-	// 如果有尾巴就从屁股开始循环尾巴
-	for ; buttocksPointer < tailPointer; buttocksPointer++ {
-		pData := (*byte)(unsafe.Pointer(buttocksPointer))
-		*pData = 0
+	if size > int64Size { // 如果初始化的内存>8字节才加速
+		// 循环到屁股
+		for ; pointer < buttocksPointer; pointer += int64Size {
+			pData := (*int64)(unsafe.Pointer(pointer))
+			*pData = 0
+		}
+		// 如果有尾巴就从屁股开始循环尾巴
+		for ; buttocksPointer < tailPointer; buttocksPointer++ {
+			pData := (*byte)(unsafe.Pointer(buttocksPointer))
+			*pData = 0
+		}
+	} else { // 否则不用加速
+		// 从头循到尾循环
+		for ; pointer < tailPointer; pointer++ {
+			pData := (*byte)(unsafe.Pointer(pointer))
+			*pData = 0
+		}
 	}
 }
