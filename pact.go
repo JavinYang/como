@@ -1,7 +1,6 @@
 package como
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -78,8 +77,6 @@ NEW_ORG:
 	group[orgName] = newMailBoxAddress
 	this.groups[groupName] = group
 	orgReflect := reflect.ValueOf(org)
-	fmt.Println("??", reflect.Indirect(orgReflect).Type().Size())
-
 	runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
 }
 
