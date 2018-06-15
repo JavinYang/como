@@ -1,8 +1,10 @@
 package como
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 	"unsafe"
 )
@@ -14,7 +16,7 @@ var Pact *pacts
 func pactInit() {
 	// 创建公约
 	staticOrg := &staticPact{groups: make(map[string]map[string]MailBoxAddress)}
-	dynamicOrg := &dynamicPact{groups: make(map[string]map[string]dynamicOrgInfo)}
+	dynamicOrg := &dynamicPact{groups: make(map[string]map[string]*dynamicOrgInfo)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
 
@@ -22,19 +24,6 @@ func pactInit() {
 type pacts struct {
 	Static  *staticPact
 	Dynamic *dynamicPact
-}
-
-// 创建一个新动态组织带超时控制 overtime == -1 时永不超时
-func (this *pacts) New(org provision, mailLen int, overtime int64, initPars ...interface{}) (mailBoxAddress MailBoxAddress) {
-	newMailBoxAddress := org.init("", "", mailLen, overtime)
-	orgReflect := reflect.ValueOf(org)
-	if overtime == -1 {
-		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
-	} else {
-		runWithTimeout(newMailBoxAddress, orgReflect, org, initPars...)
-	}
-
-	return newMailBoxAddress
 }
 
 // 组织规定规范
@@ -77,7 +66,9 @@ NEW_ORG:
 	group[orgName] = newMailBoxAddress
 	this.groups[groupName] = group
 	orgReflect := reflect.ValueOf(org)
-	runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
+	orgInstanceInfo := (&orgInstanceInfo{}).Init(orgReflect)
+
+	runNeverTimeout(newMailBoxAddress, orgInstanceInfo, 0, nil, initPars...)
 }
 
 // 查询静态组织邮箱地址
@@ -114,14 +105,15 @@ func (this *staticPact) GetAllGroupInfo() (GroupsInfo string) {
 
 // 动态组织公约
 type dynamicPact struct {
-	groups map[string]map[string]dynamicOrgInfo
+	groups map[string]map[string]*dynamicOrgInfo
 }
 
 // 动态组织信息
 type dynamicOrgInfo struct {
-	orgType  reflect.Type
+	orgSize  uintptr
 	mailLen  int
 	overtime int64
+	pool     sync.Pool
 }
 
 // 加入动态组织 overtime == -1 永不超时
@@ -129,7 +121,7 @@ func (this *dynamicPact) Join(groupName, orgName string, org provision, mailLen 
 
 	group, ok := this.groups[groupName]
 	if !ok {
-		group = make(map[string]dynamicOrgInfo)
+		group = make(map[string]*dynamicOrgInfo)
 		goto NEW_ORG
 	}
 
@@ -139,7 +131,16 @@ func (this *dynamicPact) Join(groupName, orgName string, org provision, mailLen 
 	}
 
 NEW_ORG:
-	group[orgName] = dynamicOrgInfo{reflect.Indirect(reflect.ValueOf(org)).Type(), mailLen, overtime}
+	orgType := reflect.Indirect(reflect.ValueOf(org)).Type() // 必须是值类型
+	orgSize := orgType.Size()
+	pool := sync.Pool{
+		New: func() interface{} {
+			orgReflect := reflect.New(orgType) // New新的肯定是指针
+			return (&orgInstanceInfo{}).Init(orgReflect)
+		},
+	}
+
+	group[orgName] = &dynamicOrgInfo{orgSize, mailLen, overtime, pool}
 	this.groups[groupName] = group
 }
 
@@ -155,13 +156,13 @@ func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{})
 		return
 	}
 	overtime := dynamicOrgInfo.overtime
-	orgReflect := reflect.New(dynamicOrgInfo.orgType)
-	org := orgReflect.Interface().(provision)
-	newMailBoxAddress := org.init(groupName, orgName, dynamicOrgInfo.mailLen, overtime)
+
+	orgInstanceInfo := dynamicOrgInfo.pool.Get().(*orgInstanceInfo)
+	newMailBoxAddress := orgInstanceInfo.org.init(groupName, orgName, dynamicOrgInfo.mailLen, overtime)
 	if overtime == -1 {
-		runNeverTimeout(newMailBoxAddress, orgReflect, org, initPars...)
+		runNeverTimeout(newMailBoxAddress, orgInstanceInfo, dynamicOrgInfo.orgSize, &dynamicOrgInfo.pool, initPars...)
 	} else {
-		runWithTimeout(newMailBoxAddress, orgReflect, org, initPars...)
+		runWithTimeout(newMailBoxAddress, orgInstanceInfo, dynamicOrgInfo.orgSize, &dynamicOrgInfo.pool, initPars...)
 	}
 
 	return newMailBoxAddress, true
@@ -190,22 +191,12 @@ func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
 }
 
 // 运行无超时
-func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
+func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
 
 	go func() {
-		planningMethodsMap := make(map[string]func())
-		numMethod := orgReflect.NumMethod()
-		for i := 0; i < numMethod; i++ {
-			methodName := orgReflect.Type().Method(i).Name
-			switch methodName {
-			case "Init":
-			case "RoutineStart":
-			case "RoutineEnd":
-			case "Terminate":
-			default:
-				planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
-			}
-		}
+
+		org := orgInstanceInfo.org
+		methodsMap := orgInstanceInfo.methodsMap
 
 		T_T := org.getLeader()
 
@@ -214,6 +205,10 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 			select {
 			case <-newMailBoxAddress.isShut:
 				org.Terminate()
+				if orgPool != nil {
+					memsetZero(orgInstanceInfo.pointer, orgSize)
+					orgPool.Put(orgInstanceInfo)
+				}
 				return
 			case mail, _ := <-newMailBoxAddress.address:
 				if mail.systemTag == mailSystemTag_deathNotice {
@@ -223,7 +218,7 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 					}
 					continue
 				}
-				method, ok := planningMethodsMap[mail.recipientServerName]
+				method, ok := methodsMap[mail.recipientServerName]
 				if !ok {
 					continue
 				}
@@ -244,7 +239,10 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value,
 }
 
 // 运行有超时
-func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, org provision, initPars ...interface{}) {
+func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
+
+	org := orgInstanceInfo.org
+	methodsMap := orgInstanceInfo.methodsMap
 
 	T_T := org.getLeader()
 
@@ -267,19 +265,6 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 	}()
 
 	go func() {
-		planningMethodsMap := make(map[string]func())
-		numMethod := orgReflect.NumMethod()
-		for i := 0; i < numMethod; i++ {
-			methodName := orgReflect.Type().Method(i).Name
-			switch methodName {
-			case "Init":
-			case "RoutineStart":
-			case "RoutineEnd":
-			case "Terminate":
-			default:
-				planningMethodsMap[methodName] = orgReflect.Method(i).Interface().(func())
-			}
-		}
 
 		org.Init(initPars...)
 		for {
@@ -287,6 +272,11 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 			case <-newMailBoxAddress.isShut:
 				close(updateEndTime)
 				org.Terminate()
+				if orgPool != nil {
+					fmt.Println("Put")
+					memsetZero(orgInstanceInfo.pointer, orgSize)
+					orgPool.Put(orgInstanceInfo)
+				}
 				return
 			case mail, _ := <-newMailBoxAddress.address:
 				if mail.systemTag != mailSystemTag__ {
@@ -301,7 +291,7 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 						continue
 					}
 				}
-				method, ok := planningMethodsMap[mail.recipientServerName]
+				method, ok := methodsMap[mail.recipientServerName]
 				if !ok {
 					continue
 				}
@@ -321,8 +311,41 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgReflect reflect.Value, 
 	}()
 }
 
+// 组织实例后的信息
+type orgInstanceInfo struct {
+	org        provision
+	pointer    uintptr
+	methodsMap map[string]func()
+}
+
+// 初始化组织实例信息
+func (this *orgInstanceInfo) Init(orgReflect reflect.Value) *orgInstanceInfo {
+	numMethod := orgReflect.NumMethod()
+	this.methodsMap = make(map[string]func())
+	for i := 0; i < numMethod; i++ {
+		methodName := orgReflect.Type().Method(i).Name
+		switch methodName {
+		case "Init":
+		case "RoutineStart":
+		case "RoutineEnd":
+		case "Terminate":
+		default:
+			this.methodsMap[methodName] = orgReflect.Method(i).Interface().(func())
+		}
+	}
+	this.org = orgReflect.Interface().(provision) // 必须是指针
+	this.pointer = orgReflect.Elem().UnsafeAddr() // 获取指针指向的的值的地址
+	return this
+}
+
 // 初始化内存
 func memsetZero(pointer uintptr, size uintptr) {
+
+	fmt.Println("尺寸", size)
+
+	if size < 1 { // 必须有要写0的内存尺寸
+		return
+	}
 
 	tailPointer := pointer + size
 	int64Size := unsafe.Sizeof(int64(0))
