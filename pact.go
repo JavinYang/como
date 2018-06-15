@@ -1,7 +1,6 @@
 package como
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -273,7 +272,6 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstan
 				close(updateEndTime)
 				org.Terminate()
 				if orgPool != nil {
-					fmt.Println("Put")
 					memsetZero(orgInstanceInfo.pointer, orgSize)
 					orgPool.Put(orgInstanceInfo)
 				}
@@ -340,8 +338,6 @@ func (this *orgInstanceInfo) Init(orgReflect reflect.Value) *orgInstanceInfo {
 
 // 初始化内存
 func memsetZero(pointer uintptr, size uintptr) {
-
-	fmt.Println("尺寸", size)
 
 	if size < 1 { // 必须有要写0的内存尺寸
 		return
