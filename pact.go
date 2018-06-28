@@ -1,6 +1,7 @@
 package como
 
 import (
+	//	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -247,6 +248,9 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstan
 
 	updateEndTime := T_T.getUpdateEndTimeChan()
 
+	orgMutex := sync.Mutex{}
+	isShut := false
+
 	go func() {
 		endTime := T_T.GetEndTime()
 		ok := false
@@ -257,7 +261,12 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstan
 					return
 				}
 			case <-time.After(time.Duration((endTime - time.Now().Unix()) * 1e9)):
-				T_T.timeOut()
+				orgMutex.Lock()
+				if !isShut {
+					isShut = true
+					T_T.timeOut()
+				}
+				orgMutex.Unlock()
 				return
 			}
 		}
@@ -269,8 +278,13 @@ func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstan
 		for {
 			select {
 			case <-newMailBoxAddress.isShut:
-				close(updateEndTime)
 				org.Terminate()
+				orgMutex.Lock()
+				if !isShut {
+					isShut = true
+					close(updateEndTime)
+				}
+				orgMutex.Unlock()
 				if orgPool != nil {
 					memsetZero(orgInstanceInfo.pointer, orgSize)
 					orgPool.Put(orgInstanceInfo)
