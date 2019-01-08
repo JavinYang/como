@@ -30,7 +30,7 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	this.MailBox.AddressMap.deathNote = &sync.Map{}
 	this.MailBox.AddressMap.mournNote = &sync.Map{}
 	this.MailBox.authorizations = make(map[string]interface{})
-	this.T_T.runningUpdates = make(map[Uid]struct{})
+	this.T_T.runningUpdates = sync.Map{}
 	this.T_T.updateNotify = make(chan *updateInfo, 0)
 	this.startTime = time.Now().Unix()
 	this.endTime = this.startTime + overtime
@@ -86,7 +86,7 @@ func (this *Provision) Terminate() {}
 type leader struct {
 	currentAcceptState bool             // 是否接受受理了当前请求
 	updateNotify       chan *updateInfo // 通知组织运行循环的通道
-	runningUpdates     map[Uid]struct{} // 当前运行的附属循环
+	runningUpdates     sync.Map         // 当前运行的附属循环
 }
 
 // 是否同意本次请求
@@ -95,29 +95,49 @@ func (this *leader) isAccept() bool {
 }
 
 // 添加事物循环处理并立刻运行一次function
-func (this *leader) AddUpdateImmediateRun(function func(), timestep time.Duration) (uid Uid) {
-	function()
-	return this.AddUpdate(function, timestep)
+func (this *leader) AddUpdateImmediateRun(function func(), timestep time.Duration, times int64) (uid Uid) {
+	if times != 0 {
+		function()
+		times -= 1
+	}
+	return this.AddUpdate(function, timestep, times)
 }
 
 // 添加事物循环处理
-func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid) {
+func (this *leader) AddUpdate(function func(), timestep time.Duration, times int64) (uid Uid) {
 	updateColseChan := make(chan struct{}, 0)
 	updateInfo := &updateInfo{updateColseChan: updateColseChan, isColse: false, function: function}
 	uid = Uid(updateInfo)
-	this.runningUpdates[uid] = struct{}{}
+	this.runningUpdates.Store(uid, struct{}{})
 	go func() {
-		for {
-			select {
-			case <-updateColseChan:
-				return
-			case <-time.After(timestep):
+		if times < 0 { // 无限次循环
+			for {
 				select {
 				case <-updateColseChan:
 					return
-				case this.updateNotify <- updateInfo:
+				case <-time.After(timestep):
+					select {
+					case <-updateColseChan:
+						return
+					case this.updateNotify <- updateInfo:
+					}
 				}
 			}
+		} else if times > 0 { // 有限次循环
+			var i int64 = 0
+			for ; i < times; i++ {
+				select {
+				case <-updateColseChan:
+					return
+				case <-time.After(timestep):
+					select {
+					case <-updateColseChan:
+						return
+					case this.updateNotify <- updateInfo:
+					}
+				}
+			}
+			this.runningUpdates.Delete(uid)
 		}
 	}()
 	return
@@ -125,21 +145,23 @@ func (this *leader) AddUpdate(function func(), timestep time.Duration) (uid Uid)
 
 // 清除事物循环处理
 func (this *leader) RemoveUpdate(uid Uid) {
-	_, ok := this.runningUpdates[uid]
+	_, ok := this.runningUpdates.Load(uid)
 	if !ok {
 		return
 	}
 	(*uid).close()
-	delete(this.runningUpdates, uid)
+	this.runningUpdates.Delete(uid)
 	return
 }
 
 // 清理所有子循环
 func (this *leader) CleanUpdates() {
-	for uid, _ := range this.runningUpdates {
+	this.runningUpdates.Range(func(key interface{}, value interface{}) bool {
+		uid := key.(Uid)
 		(*uid).close()
-		delete(this.runningUpdates, uid)
-	}
+		this.runningUpdates.Delete(uid)
+		return true
+	})
 }
 
 // 拒绝本次服务
