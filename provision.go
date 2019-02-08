@@ -556,12 +556,19 @@ func (this *MailBoxAddress) send(mail mail) (ok bool) {
 	return
 }
 
-// 授权
+// 获取授权
 func (this *MailBoxAddress) Remark(key string) (val interface{}, ok bool) {
 	this.mutex.Lock()
 	val, ok = this.mailBox.authorizations[key]
 	this.mutex.Unlock()
 	return
+}
+
+// 授权
+func (this *MailBoxAddress) SetRemark(key string, value interface{}) {
+	this.mutex.Lock()
+	this.mailBox.authorizations[key] = value
+	this.mutex.Unlock()
 }
 
 // 删除授权

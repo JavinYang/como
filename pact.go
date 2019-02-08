@@ -2,6 +2,7 @@ package como
 
 import (
 	//	"fmt"
+	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -342,6 +343,7 @@ func (this *orgInstanceInfo) Init(orgReflect reflect.Value) *orgInstanceInfo {
 		case "RoutineEnd":
 		case "Terminate":
 		default:
+			fmt.Println("加入的函数是", methodName)
 			this.methodsMap[methodName] = orgReflect.Method(i).Interface().(func())
 		}
 	}
