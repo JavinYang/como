@@ -16,7 +16,7 @@ var Pact *pacts
 // 初始化公约实例
 func pactInit() {
 	// 创建公约
-	staticOrg := &staticPact{groups: make(map[string]map[string]MailBoxAddress)}
+	staticOrg := &staticPact{groups: make(map[string]map[string]*MailBoxAddress)}
 	dynamicOrg := &dynamicPact{groups: make(map[string]map[string]*dynamicOrgInfo)}
 	Pact = &pacts{staticOrg, dynamicOrg}
 }
@@ -29,7 +29,7 @@ type pacts struct {
 
 // 组织规定规范
 type provision interface {
-	init(pactGroupName, pactRegisterName string, mailLen int, overTime int64) (newMailBoxAddress MailBoxAddress)
+	init(pactGroupName, pactRegisterName string, mailLen int, overTime int64) (newMailBoxAddress *MailBoxAddress)
 	deliverMailForMailBox(newMail mail)
 	getLeader() *leader
 	Init(...interface{})
@@ -43,7 +43,7 @@ type provision interface {
 
 // 静态组织公约
 type staticPact struct {
-	groups map[string]map[string]MailBoxAddress
+	groups map[string]map[string]*MailBoxAddress
 }
 
 // 公开加入静态组织
@@ -51,7 +51,7 @@ func (this *staticPact) Join(groupName, orgName string, org provision, mailLen i
 
 	group, ok := this.groups[groupName]
 	if !ok {
-		group = make(map[string]MailBoxAddress)
+		group = make(map[string]*MailBoxAddress)
 		goto NEW_ORG
 	}
 
@@ -73,7 +73,7 @@ NEW_ORG:
 }
 
 // 查询静态组织邮箱地址
-func (this *staticPact) FindMailBoxAddress(groupName, orgName string) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *staticPact) FindMailBoxAddress(groupName, orgName string) (mailBoxAddress *MailBoxAddress, ok bool) {
 	orgsMailBoxAddress, ok := this.groups[groupName]
 	if !ok {
 		return
@@ -146,7 +146,7 @@ NEW_ORG:
 }
 
 // 生成已经加入的动态组织
-func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{}) (mailBoxAddress MailBoxAddress, ok bool) {
+func (this *dynamicPact) New(groupName, orgName string, initPars ...interface{}) (mailBoxAddress *MailBoxAddress, ok bool) {
 	group, ok := this.groups[groupName]
 	if !ok {
 		return
@@ -192,7 +192,7 @@ func (this *dynamicPact) GetAllGroupInfo() (GroupsInfo string) {
 }
 
 // 运行无超时
-func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
+func runNeverTimeout(newMailBoxAddress *MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
 
 	go func() {
 
@@ -240,7 +240,7 @@ func runNeverTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInsta
 }
 
 // 运行有超时
-func runWithTimeout(newMailBoxAddress MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
+func runWithTimeout(newMailBoxAddress *MailBoxAddress, orgInstanceInfo *orgInstanceInfo, orgSize uintptr, orgPool *sync.Pool, initPars ...interface{}) {
 
 	org := orgInstanceInfo.org
 	methodsMap := orgInstanceInfo.methodsMap

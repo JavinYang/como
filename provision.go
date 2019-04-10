@@ -18,7 +18,7 @@ type Provision struct {
 }
 
 // 初始化(框架内部使用)
-func (this *Provision) init(groupName, orgName string, mailLen int, overtime int64) (newMailBoxAddress MailBoxAddress) {
+func (this *Provision) init(groupName, orgName string, mailLen int, overtime int64) (newMailBoxAddress *MailBoxAddress) {
 	this.groupName = groupName
 	this.orgName = orgName
 	this.MailBox.org = this
@@ -26,7 +26,7 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	this.MailBox.Address.address = make(chan mail, mailLen)
 	this.MailBox.Address.mutex = &sync.Mutex{}
 	this.MailBox.Address.isShut = make(chan struct{}, 0)
-	this.MailBox.AddressMap.addressMap = make(map[string]map[MailBoxAddress]struct{})
+	this.MailBox.AddressMap.addressMap = make(map[string]map[*MailBoxAddress]struct{})
 	this.MailBox.AddressMap.deathNote = &sync.Map{}
 	this.MailBox.AddressMap.mournNote = &sync.Map{}
 	this.MailBox.authorizations = make(map[string]interface{})
@@ -35,7 +35,7 @@ func (this *Provision) init(groupName, orgName string, mailLen int, overtime int
 	this.startTime = time.Now().Unix()
 	this.endTime = this.startTime + overtime
 	this.updateEndTime = make(chan int64, 0)
-	return this.MailBox.Address
+	return &this.MailBox.Address
 }
 
 // 投递邮件到邮箱(框架内部使用)
@@ -214,14 +214,14 @@ func (this *leader) SetEndTime(newEndTime int64) {
 }
 
 // 建立连接(共生死)
-func (this *leader) LinkDD(hisAddr MailBoxAddress) {
+func (this *leader) LinkDD(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你就死
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -239,14 +239,14 @@ func (this *leader) LinkDD(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死你办事，你死我办事)
-func (this *leader) LinkMM(hisAddr MailBoxAddress) {
+func (this *leader) LinkMM(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你办事
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -264,14 +264,14 @@ func (this *leader) LinkMM(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死你也死，你死我办事)
-func (this *leader) LinkDM(hisAddr MailBoxAddress) {
+func (this *leader) LinkDM(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你就死
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -289,14 +289,14 @@ func (this *leader) LinkDM(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死你办事，你死我也死)
-func (this *leader) LinkMD(hisAddr MailBoxAddress) {
+func (this *leader) LinkMD(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你办事
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -314,14 +314,14 @@ func (this *leader) LinkMD(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死你也死，你死无所谓)
-func (this *leader) LinkD_(hisAddr MailBoxAddress) {
+func (this *leader) LinkD_(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你就死
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -333,14 +333,14 @@ func (this *leader) LinkD_(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死无所谓，你死我也死)
-func (this *leader) Link_D(hisAddr MailBoxAddress) {
+func (this *leader) Link_D(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死无所谓
 	myAddrMap.deathNote.Delete(hisAddr)
@@ -358,14 +358,14 @@ func (this *leader) Link_D(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死你办事，你死无所谓)
-func (this *leader) LinkM_(hisAddr MailBoxAddress) {
+func (this *leader) LinkM_(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死你办事
 	myAddrMap.deathNote.Store(hisAddr, struct{}{})
@@ -377,14 +377,14 @@ func (this *leader) LinkM_(hisAddr MailBoxAddress) {
 }
 
 // 建立连接(我死无所谓，你死我办事)
-func (this *leader) Link_M(hisAddr MailBoxAddress) {
+func (this *leader) Link_M(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死无所谓
 	myAddrMap.deathNote.Delete(hisAddr)
@@ -403,14 +403,14 @@ func (this *leader) Link_M(hisAddr MailBoxAddress) {
 }
 
 // 解除连接
-func (this *leader) Link__(hisAddr MailBoxAddress) {
+func (this *leader) Link__(hisAddr *MailBoxAddress) {
 	org := (*Provision)(unsafe.Pointer(this))
-	if hisAddr == org.MailBox.Address || hisAddr.mailBox == nil {
+	if hisAddr == &org.MailBox.Address || hisAddr.mailBox == nil {
 		return
 	}
-	myAddr := org.MailBox.Address
+	myAddr := &org.MailBox.Address
 	myAddrMap := org.MailBox.AddressMap
-	hisAddrMap := hisAddr.mailBox.AddressMap
+	hisAddrMap := &hisAddr.mailBox.AddressMap
 
 	// 我死无所谓
 	myAddrMap.deathNote.Delete(hisAddr)
@@ -422,12 +422,12 @@ func (this *leader) Link__(hisAddr MailBoxAddress) {
 }
 
 // 冒充对方发送遗嘱给自己
-func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress MailBoxAddress) {
+func (this *leader) sendTestamentForMe(org *Provision, mailBoxAddress *MailBoxAddress) {
 	draft := org.MailBox.Write()
 	draft.systemTag = mailSystemTag_deathNotice
 	draft.senderAddress = mailBoxAddress
 	draft.senderServerName = ""
-	draft.recipientAddress = org.MailBox.Address
+	draft.recipientAddress = &org.MailBox.Address
 	draft.Send()
 }
 
@@ -437,7 +437,7 @@ func (this *leader) timeOut() {
 	draft := org.MailBox.Write()
 	draft.systemTag = mailSystemTag_timeOut
 	draft.senderServerName = ""
-	draft.recipientAddress = org.MailBox.Address
+	draft.recipientAddress = &org.MailBox.Address
 	draft.Send()
 }
 
@@ -494,7 +494,7 @@ type mailBox struct {
 func (this *mailBox) Write() draft {
 	newDraft := draftPoll.Get().(draft)
 	newDraft.systemTag = mailSystemTag__
-	newDraft.senderAddress = this.Address
+	newDraft.senderAddress = &this.Address
 	newDraft.senderGroupName = this.org.groupName
 	newDraft.senderOrgName = this.org.orgName
 	newDraft.senderServerName = this.mail.recipientServerName
@@ -537,7 +537,7 @@ func (this *MailBoxAddress) shut() {
 			func(key interface{}, val interface{}) bool {
 				draft := this.mailBox.Write()
 				draft.systemTag = mailSystemTag_deathNotice
-				draft.recipientAddress = key.(MailBoxAddress)
+				draft.recipientAddress = key.(*MailBoxAddress)
 				draft.Send()
 				return true
 			})
@@ -593,17 +593,17 @@ func (this *MailBoxAddress) RemoveAllRemarks() {
 
 // 通讯录
 type addressMap struct {
-	addressMap map[string]map[MailBoxAddress]struct{}
+	addressMap map[string]map[*MailBoxAddress]struct{}
 	deathNote  *sync.Map // 我死的时候要通知的人
 	mournNote  *sync.Map // 听这些人的遗嘱(ture表示我一起死，flase表示吊念)
 }
 
 // 添加好友
-func (this *addressMap) AddFriend(friendName string, mailBoxAddress MailBoxAddress) {
+func (this *addressMap) AddFriend(friendName string, mailBoxAddress *MailBoxAddress) {
 
 	_, ok := this.addressMap[friendName]
 	if !ok {
-		this.addressMap[friendName] = make(map[MailBoxAddress]struct{})
+		this.addressMap[friendName] = make(map[*MailBoxAddress]struct{})
 	}
 	this.addressMap[friendName][mailBoxAddress] = struct{}{}
 }
@@ -618,7 +618,7 @@ func (this *addressMap) RemoveFriends(friendsName string) {
 }
 
 // 删除用户
-func (this *addressMap) RemoveFriend(mailBoxAddress MailBoxAddress) {
+func (this *addressMap) RemoveFriend(mailBoxAddress *MailBoxAddress) {
 	for friendsName, mailBoxsAddress := range this.addressMap {
 		_, ok := mailBoxsAddress[mailBoxAddress]
 		if ok {
@@ -638,7 +638,7 @@ func (this *addressMap) RemoveFriendByName(friendName string, mailBoxAddress Mai
 	if !ok {
 		return
 	}
-	_, ok = mailBoxsAddress[mailBoxAddress]
+	_, ok = mailBoxsAddress[&mailBoxAddress]
 	if !ok {
 		return
 	}
@@ -646,21 +646,21 @@ func (this *addressMap) RemoveFriendByName(friendName string, mailBoxAddress Mai
 		delete(this.addressMap, friendName)
 		return
 	}
-	delete(mailBoxsAddress, mailBoxAddress)
+	delete(mailBoxsAddress, &mailBoxAddress)
 }
 
 // 删除所有好友
 func (this *addressMap) RemoveAllFriends() {
-	this.addressMap = make(map[string]map[MailBoxAddress]struct{})
+	this.addressMap = make(map[string]map[*MailBoxAddress]struct{})
 }
 
 // 获取好友
-func (this *addressMap) GetFriends(friendsName string) (friendsMailBoxAddr []MailBoxAddress, ok bool) {
+func (this *addressMap) GetFriends(friendsName string) (friendsMailBoxAddr []*MailBoxAddress, ok bool) {
 	mailBoxsAddress, ok := this.addressMap[friendsName]
 	if !ok {
 		return
 	}
-	friendsMailBoxAddr = make([]MailBoxAddress, 0, len(mailBoxsAddress))
+	friendsMailBoxAddr = make([]*MailBoxAddress, 0, len(mailBoxsAddress))
 	for mailBoxAddress, _ := range mailBoxsAddress {
 		friendsMailBoxAddr = append(friendsMailBoxAddr, mailBoxAddress)
 	}
@@ -672,7 +672,7 @@ func (this *addressMap) GetFriends(friendsName string) (friendsMailBoxAddr []Mai
 func (this *addressMap) GetFriendName(mailBoxAddress MailBoxAddress) (friendName string, ok bool) {
 	for friendName, addresss := range this.addressMap {
 		for address, _ := range addresss {
-			if address == mailBoxAddress {
+			if address == &mailBoxAddress {
 				return friendName, true
 			}
 		}
@@ -682,8 +682,8 @@ func (this *addressMap) GetFriendName(mailBoxAddress MailBoxAddress) (friendName
 }
 
 // 获取所有好友
-func (this *addressMap) GetAllFriends() (friendsMailBoxAddr []MailBoxAddress) {
-	friendsMailBoxAddr = make([]MailBoxAddress, 0, 10)
+func (this *addressMap) GetAllFriends() (friendsMailBoxAddr []*MailBoxAddress) {
+	friendsMailBoxAddr = make([]*MailBoxAddress, 0, 10)
 	for _, mailBoxsAddress := range this.addressMap {
 		for mailBoxAddress, _ := range mailBoxsAddress {
 			friendsMailBoxAddr = append(friendsMailBoxAddr, mailBoxAddress)
@@ -733,20 +733,20 @@ const (
 
 // 邮件
 type mail struct {
-	systemTag           mailSystemTag  // 邮箱系统标识符
-	senderAddress       MailBoxAddress // 发件人地址
-	senderGroupName     string         // 发送人组名
-	senderOrgName       string         // 发送人组织名
-	senderServerName    string         // 发件人服务名字
-	recipientAddress    MailBoxAddress // 收件人地址
-	recipientGroupName  string         // 收件人组名
-	recipientOrgName    string         // 收件人组织名
-	recipientServerName string         // 收件人服务名字
-	contents            []interface{}  // 邮件内容
+	systemTag           mailSystemTag   // 邮箱系统标识符
+	senderAddress       *MailBoxAddress // 发件人地址
+	senderGroupName     string          // 发送人组名
+	senderOrgName       string          // 发送人组织名
+	senderServerName    string          // 发件人服务名字
+	recipientAddress    *MailBoxAddress // 收件人地址
+	recipientGroupName  string          // 收件人组名
+	recipientOrgName    string          // 收件人组织名
+	recipientServerName string          // 收件人服务名字
+	contents            []interface{}   // 邮件内容
 }
 
 // 获取发件人地址
-func (this *mail) SenderAddress() MailBoxAddress {
+func (this *mail) SenderAddress() *MailBoxAddress {
 	return this.senderAddress
 }
 
@@ -797,7 +797,7 @@ func (this mail) Forward(recipientAddress MailBoxAddress, recipientServerName st
 	draft.senderGroupName = draft.recipientGroupName   // 接受组名变发送组名
 	draft.senderOrgName = draft.recipientOrgName       // 接受组织名变发送组织名
 	draft.senderServerName = draft.recipientServerName // 接收人变成发送人
-	draft.recipientAddress = recipientAddress          // 设置接收地址
+	draft.recipientAddress = &recipientAddress         // 设置接收地址
 	draft.recipientServerName = recipientServerName    // 设置接收人
 	return draft                                       // 返回这个草稿
 }
@@ -806,7 +806,7 @@ func (this mail) Forward(recipientAddress MailBoxAddress, recipientServerName st
 type draft mail
 
 // 设置收件人地址
-func (this *draft) RecipientAddress(mailBoxAddress MailBoxAddress) {
+func (this *draft) RecipientAddress(mailBoxAddress *MailBoxAddress) {
 	this.recipientAddress = mailBoxAddress
 }
 
